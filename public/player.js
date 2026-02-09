@@ -157,7 +157,7 @@ function startSpinAnimation() {
       clearInterval(runtime.timer);
     }
 
-    const step = reel.direction === "up_to_down" ? 0.45 : -0.45;
+    const step = reel.direction === "up_to_down" ? 0.1 : -0.1;
     runtime.timer = setInterval(() => {
       runtime.position += step;
       normalizePosition(reel.reelId);
