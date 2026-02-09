@@ -1,0 +1,253 @@
+:root {
+  --ink: #0f172a;
+  --muted: #475569;
+  --bg-a: #fef3c7;
+  --bg-b: #fee2e2;
+  --panel: rgba(255, 255, 255, 0.84);
+  --accent: #0f766e;
+  --accent-2: #ea580c;
+  --danger: #b91c1c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Noto Sans TC", "PingFang TC", "Hiragino Sans", sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 12% 18%, rgba(15, 118, 110, 0.18), transparent 45%),
+    radial-gradient(circle at 85% 8%, rgba(234, 88, 12, 0.18), transparent 43%),
+    linear-gradient(130deg, var(--bg-a), var(--bg-b));
+}
+
+.admin-shell {
+  width: min(1440px, 98vw);
+  margin: 0 auto;
+  padding: 12px;
+}
+
+.auth-panel {
+  width: min(420px, 95vw);
+  margin: 14vh auto 0;
+  padding: 20px;
+  border-radius: 16px;
+  background: var(--panel);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 24px 44px rgba(2, 6, 23, 0.16);
+}
+
+.auth-panel h1 {
+  margin: 0 0 12px;
+}
+
+.auth-panel form {
+  display: grid;
+  gap: 10px;
+}
+
+.auth-panel input,
+.auth-panel button,
+.toolbar button,
+.pager-row button {
+  border: 0;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  padding: 10px 12px;
+}
+
+.auth-panel input {
+  border: 1px solid rgba(15, 23, 42, 0.25);
+}
+
+.auth-panel button {
+  background: var(--accent);
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.hidden {
+  display: none;
+}
+
+.dashboard {
+  display: grid;
+  gap: 10px;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.left-tools h1 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.left-tools p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.right-tools {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.mode-btn {
+  color: var(--ink);
+  background: #e2e8f0;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.mode-btn.active {
+  color: #fff;
+  background: var(--accent);
+}
+
+.reset-btn {
+  color: #fff;
+  background: var(--accent-2);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.reset-btn:disabled,
+.pager-row button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.grid {
+  min-height: 72vh;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  display: grid;
+  gap: 8px;
+}
+
+.tile {
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: #ffffff;
+  padding: 8px;
+  display: grid;
+  gap: 5px;
+  align-content: start;
+}
+
+.tile-name {
+  font-weight: 900;
+  font-size: 1.03rem;
+}
+
+.tile-state {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.tile-symbols {
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.tile-msg {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.tile.winner {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 2px #fde68a inset, 0 0 16px rgba(245, 158, 11, 0.4);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-1px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+.pager-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+
+.pager-row button {
+  background: #334155;
+  color: white;
+  cursor: pointer;
+}
+
+#page-info {
+  min-width: 120px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.confetti-layer {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+.confetti-piece {
+  position: absolute;
+  top: -16px;
+  width: 8px;
+  height: 14px;
+  border-radius: 2px;
+  animation: drop linear forwards;
+}
+
+@keyframes drop {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(106vh) rotate(680deg);
+    opacity: 0;
+  }
+}
+
+@media (max-width: 920px) {
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .right-tools {
+    justify-content: flex-start;
+  }
+
+  .grid {
+    min-height: 65vh;
+  }
+}

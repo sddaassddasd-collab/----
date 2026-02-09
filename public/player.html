@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>吃角子老虎機 - 前台</title>
+    <link rel="stylesheet" href="/player.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <h1>複象公場 拉霸</h1>
+        <div class="status-wrap">
+          <span id="mode-badge" class="mode-badge">練習模式</span>
+          <span id="conn-badge" class="conn-badge">連線中</span>
+        </div>
+      </header>
+
+      <section id="name-screen" class="panel">
+        <h2>輸入姓名開始</h2>
+        <form id="name-form" class="name-form">
+          <input id="name-input" type="text" maxlength="20" placeholder="請輸入姓名" required />
+          <button type="submit">進入遊戲</button>
+        </form>
+      </section>
+
+      <section id="game-screen" class="panel hidden">
+        <p id="welcome-text" class="welcome-text"></p>
+
+        <div id="reels" class="reel-grid">
+          <article class="reel-card" data-reel-id="1">
+            <p class="reel-title">Reel 1</p>
+            <div id="reel-symbol-1" class="reel-symbol">複</div>
+            <button id="stop-1" class="stop-btn" disabled>停止</button>
+          </article>
+          <article class="reel-card" data-reel-id="2">
+            <p class="reel-title">Reel 2</p>
+            <div id="reel-symbol-2" class="reel-symbol">象</div>
+            <button id="stop-2" class="stop-btn" disabled>停止</button>
+          </article>
+          <article class="reel-card" data-reel-id="3">
+            <p class="reel-title">Reel 3</p>
+            <div id="reel-symbol-3" class="reel-symbol">公</div>
+            <button id="stop-3" class="stop-btn" disabled>停止</button>
+          </article>
+          <article class="reel-card" data-reel-id="4">
+            <p class="reel-title">Reel 4</p>
+            <div id="reel-symbol-4" class="reel-symbol">場</div>
+            <button id="stop-4" class="stop-btn" disabled>停止</button>
+          </article>
+        </div>
+
+        <div class="action-row">
+          <button id="spin-btn" class="primary-btn" disabled>開始轉動</button>
+          <button id="reset-btn" class="secondary-btn" disabled>Reset</button>
+        </div>
+
+        <p id="result-msg" class="result-msg"></p>
+      </section>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/player.js"></script>
+  </body>
+</html>

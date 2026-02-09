@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>吃角子老虎機 - 後台</title>
+    <link rel="stylesheet" href="/admin.css" />
+  </head>
+  <body>
+    <main class="admin-shell">
+      <section id="auth-panel" class="auth-panel">
+        <h1>後台登入</h1>
+        <form id="auth-form">
+          <input id="token-input" type="password" placeholder="Admin token" required />
+          <button type="submit">登入</button>
+        </form>
+        <p id="auth-msg"></p>
+      </section>
+
+      <section id="dashboard" class="dashboard hidden">
+        <header class="toolbar">
+          <div class="left-tools">
+            <h1>玩家監控儀表板</h1>
+            <p id="stats-line"></p>
+          </div>
+          <div class="right-tools">
+            <button id="mode-practice" class="mode-btn">練習模式</button>
+            <button id="mode-official" class="mode-btn">正式模式</button>
+            <button id="round-reset" class="reset-btn">回合 Reset</button>
+          </div>
+        </header>
+
+        <section id="grid" class="grid"></section>
+
+        <footer class="pager-row">
+          <button id="prev-page">上一頁</button>
+          <span id="page-info"></span>
+          <button id="next-page">下一頁</button>
+        </footer>
+      </section>
+    </main>
+
+    <div id="confetti-layer" class="confetti-layer"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/admin.js"></script>
+  </body>
+</html>
