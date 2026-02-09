@@ -7,6 +7,8 @@
   --accent-2: #f97316;
   --danger: #dc2626;
   --card: rgba(255, 255, 255, 0.8);
+  --reel-item-h: 48px;
+  --reel-window-h: calc(var(--reel-item-h) * 3);
 }
 
 * {
@@ -95,8 +97,7 @@ body {
 }
 
 .name-form button,
-.action-row button,
-.stop-btn {
+.action-row button {
   border: 0;
   border-radius: 10px;
   font-size: 0.95rem;
@@ -125,7 +126,7 @@ body {
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(0, 0, 0, 0.08);
-  padding: 10px;
+  padding: 10px 10px 12px;
   text-align: center;
 }
 
@@ -136,26 +137,47 @@ body {
   letter-spacing: 0.08em;
 }
 
-.reel-symbol {
-  min-height: 62px;
-  display: grid;
-  place-items: center;
-  font-size: 2rem;
-  font-weight: 900;
+.reel-window {
+  position: relative;
+  height: var(--reel-window-h);
+  overflow: hidden;
   border-radius: 12px;
-  background: linear-gradient(180deg, #fff, #fff4e5);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 244, 229, 0.95)),
+    repeating-linear-gradient(180deg, transparent, transparent 22px, rgba(0, 0, 0, 0.03) 23px, transparent 24px);
   border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
-.stop-btn {
-  margin-top: 8px;
-  width: 100%;
-  padding: 8px;
-  background: #f59e0b;
-  color: #1f2937;
+.reel-track {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
 }
 
-.stop-btn:disabled,
+.reel-item {
+  height: var(--reel-item-h);
+  display: grid;
+  place-items: center;
+  font-size: 1.7rem;
+  font-weight: 900;
+  color: #111827;
+}
+
+.reel-center-line {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 50%;
+  height: var(--reel-item-h);
+  transform: translateY(-50%);
+  border-radius: 10px;
+  border: 2px solid rgba(14, 116, 144, 0.45);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.6),
+    0 0 20px rgba(14, 116, 144, 0.12);
+  pointer-events: none;
+}
+
 .action-row button:disabled,
 .name-form button:disabled {
   opacity: 0.45;
@@ -165,7 +187,7 @@ body {
 .action-row {
   margin-top: 14px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 10px;
 }
 
@@ -173,6 +195,12 @@ body {
   padding: 12px;
   background: var(--accent);
   color: white;
+}
+
+.stop-next-btn {
+  padding: 12px;
+  background: #f59e0b;
+  color: #1f2937;
 }
 
 .secondary-btn {
@@ -195,5 +223,9 @@ body {
 @media (min-width: 700px) {
   .reel-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .action-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

@@ -309,6 +309,12 @@ io.on("connection", (socket) => {
       return;
     }
 
+    const expectedReelId = (spin.stoppedReels.size + 1) as 1 | 2 | 3 | 4;
+    if (reelId !== expectedReelId) {
+      fail(socket, "INVALID_REEL_ORDER", "請由左到右停止轉輪");
+      return;
+    }
+
     if (spin.stoppedReels.has(reelId)) {
       return;
     }
