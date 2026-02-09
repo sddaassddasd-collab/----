@@ -86,6 +86,14 @@ function normalizePosition(reelId) {
   }
 }
 
+function currentStopIndex(reelId) {
+  const runtime = reelRuntime[reelId];
+  const symbolCount = REELS[reelId - 1].symbols.length;
+  const nearest = Math.round(runtime.position);
+  const normalized = ((nearest % symbolCount) + symbolCount) % symbolCount;
+  return normalized;
+}
+
 function setReelToSymbol(reelId, symbol, withTransition = false) {
   const reel = REELS[reelId - 1];
   const symbolIndex = reel.symbols.indexOf(symbol);
@@ -163,7 +171,7 @@ function startSpinAnimation(spinId) {
     }
 
     runtime.stopped = false;
-    const step = reel.direction === "up_to_down" ? 0.4 : -0.4;
+    const step = reel.direction === "up_to_down" ? 0.1 : -0.1;
 
     runtime.timer = setInterval(() => {
       runtime.position += step;
@@ -285,12 +293,14 @@ function emitStopNext() {
   }
 
   const reelId = nextStopReel;
+  const stopIndex = currentStopIndex(reelId);
   waitingStopAck = true;
   syncButtons();
 
   socket.emit("player:reel:stop", {
     spinId: currentSpinId,
-    reelId
+    reelId,
+    stopIndex
   });
 }
 

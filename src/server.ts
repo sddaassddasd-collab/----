@@ -3,7 +3,7 @@ import http from "node:http";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { Server, Socket } from "socket.io";
-import { createStops, isJackpot, resolveSymbols, symbolAt } from "./gameEngine.js";
+import { isJackpot, resolveSymbols, symbolAt } from "./gameEngine.js";
 import {
   AdminAuthAck,
   GameMode,
@@ -25,6 +25,7 @@ interface PlayerSpinStartPayload {
 interface ReelStopPayload {
   spinId: string;
   reelId: 1 | 2 | 3 | 4;
+  stopIndex: StopIndex;
 }
 
 interface AdminAuthPayload {
@@ -122,6 +123,10 @@ function playerFromSocket(socket: Socket): PlayerSession | undefined {
 
 function fail(socket: Socket, code: string, message: string): void {
   socket.emit("error:notice", { code, message });
+}
+
+function isValidStopIndex(value: unknown): value is StopIndex {
+  return value === 0 || value === 1 || value === 2 || value === 3 || value === 4;
 }
 
 function resetRound(): void {
@@ -267,7 +272,7 @@ io.on("connection", (socket) => {
     const progress: SpinProgress = {
       spinId,
       playerId: player.playerId,
-      stops: createStops(),
+      stops: [0, 0, 0, 0],
       stoppedReels: new Set<1 | 2 | 3 | 4>(),
       startedAt: now()
     };
@@ -319,8 +324,15 @@ io.on("connection", (socket) => {
       return;
     }
 
+    if (!isValidStopIndex(payload.stopIndex)) {
+      fail(socket, "INVALID_STOP_INDEX", "停點索引錯誤");
+      return;
+    }
+
     spin.stoppedReels.add(reelId);
-    const stopIndex = spin.stops[reelId - 1] as StopIndex;
+    const stopIndex = payload.stopIndex;
+    const stopArrayIndex = (reelId - 1) as 0 | 1 | 2 | 3;
+    spin.stops[stopArrayIndex] = stopIndex;
     const symbol = symbolAt(reelId, stopIndex);
 
     io.emit("spin:reel_stopped", {
