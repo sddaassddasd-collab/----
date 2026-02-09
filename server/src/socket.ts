@@ -4,11 +4,14 @@ import type {
   ClientToServerEvents,
   GameMode,
   InterServerEvents,
+  ReelId,
+  Reels,
   ServerToClientEvents,
+  StopIndex,
   SocketData
 } from "../../shared/types.js";
 import { Server } from "socket.io";
-import { spinSlot } from "./logic/slotLogic.js";
+import { getEmptyReels, settleByReels, symbolAt } from "./logic/slotLogic.js";
 import { clients, createInitialClientState, getMode, resetClientState, setMode, toSnapshot } from "./state.js";
 
 type TypedIo = Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
@@ -40,6 +43,29 @@ function sanitizeName(input: string): string {
   return cleaned.length > 0 ? cleaned : "玩家";
 }
 
+function isValidReelId(value: unknown): value is ReelId {
+  return value === 1 || value === 2 || value === 3 || value === 4;
+}
+
+function isValidStopIndex(value: unknown): value is StopIndex {
+  return value === 0 || value === 1 || value === 2 || value === 3 || value === 4;
+}
+
+function nextExpectedReelId(reels: Reels): ReelId | null {
+  for (let index = 0; index < reels.length; index += 1) {
+    if (reels[index] === "-") {
+      return (index + 1) as ReelId;
+    }
+  }
+  return null;
+}
+
+function withReelSymbol(reels: Reels, reelId: ReelId, symbol: string): Reels {
+  const next = [...reels] as [string, string, string, string];
+  next[reelId - 1] = symbol;
+  return next;
+}
+
 function unlockLockedClientsForPractice(io: TypedIo): void {
   for (const [socketId, state] of clients.entries()) {
     if (state.phase === "locked") {
@@ -54,7 +80,8 @@ function unlockLockedClientsForPractice(io: TypedIo): void {
  * Socket 事件流（對應需求）
  *
  * - `client:join(name)`：註冊/覆蓋目前 socket 的玩家資料。
- * - `client:pull`：執行一次 spin，回傳結果；official 下會鎖定該玩家。
+ * - `client:pull`：開始一輪轉動（phase -> spinning）。
+ * - `client:stopReel`：每停一欄就上報後端；第 4 欄停下時才結算結果。
  * - `client:reset`：僅 practice 生效。
  * - `admin:setMode`：切換全域 mode 並廣播。
  * - `admin:resetOne` / `admin:resetAll`：僅 official 生效，解鎖與重置玩家。
@@ -89,46 +116,127 @@ export function registerSocketHandlers(io: TypedIo): void {
         return;
       }
 
-      const spinning: ClientState = { ...current, phase: "spinning" };
+      if (current.phase === "spinning") {
+        ackError(ack, "SPINNING", "目前已在轉動中");
+        return;
+      }
+
+      const spinning: ClientState = {
+        ...current,
+        phase: "spinning",
+        reels: getEmptyReels(),
+        finalReels: null,
+        isWin: false
+      };
       clients.set(socket.id, spinning);
       emitClientState(io, socket.id, spinning);
+      emitSnapshot(io);
 
-      const spin = spinSlot(mode);
-      const isLocked = mode === "official";
-      const nextState: ClientState = {
-        ...spinning,
-        reels: spin.finalReels,
-        finalReels: spin.finalReels,
-        isWin: spin.isWin,
-        phase: isLocked ? "locked" : "ready"
+      ackOk(ack, { state: spinning });
+    });
+
+    socket.on("client:stopReel", (payload, ack) => {
+      const current = clients.get(socket.id);
+      if (!current) {
+        ackError(ack, "NOT_JOINED", "請先執行 client:join(name)");
+        return;
+      }
+
+      if (current.phase !== "spinning") {
+        ackError(ack, "INVALID_STATE", "目前不在轉動中");
+        return;
+      }
+
+      const reelId = payload?.reelId;
+      const stopIndex = payload?.stopIndex;
+      if (!isValidReelId(reelId)) {
+        ackError(ack, "INVALID_REEL_ID", "reelId 必須為 1~4");
+        return;
+      }
+      if (!isValidStopIndex(stopIndex)) {
+        ackError(ack, "INVALID_STOP_INDEX", "stopIndex 必須為 0~4");
+        return;
+      }
+
+      const expectedReelId = nextExpectedReelId(current.reels);
+      if (!expectedReelId) {
+        ackError(ack, "ROUND_DONE", "本輪已完成，請重新開始");
+        return;
+      }
+      if (reelId !== expectedReelId) {
+        ackError(ack, "INVALID_ORDER", `請先停止第 ${expectedReelId} 欄`);
+        return;
+      }
+
+      const symbol = symbolAt(reelId, stopIndex);
+      const nextReels = withReelSymbol(current.reels, reelId, symbol);
+      const nextExpected = nextExpectedReelId(nextReels);
+
+      if (nextExpected) {
+        const nextState: ClientState = {
+          ...current,
+          phase: "spinning",
+          reels: nextReels,
+          finalReels: null,
+          isWin: false
+        };
+        clients.set(socket.id, nextState);
+
+        emitClientState(io, socket.id, nextState);
+        emitSnapshot(io);
+        ackOk(ack, {
+          socketId: socket.id,
+          reelId,
+          stopIndex,
+          symbol,
+          completed: false,
+          state: nextState
+        });
+        return;
+      }
+
+      const mode = getMode();
+      const settle = settleByReels(mode, nextReels);
+      const locked = mode === "official";
+      const finalState: ClientState = {
+        ...current,
+        phase: locked ? "locked" : "ready",
+        reels: nextReels,
+        finalReels: nextReels,
+        isWin: settle.isWin
       };
-      clients.set(socket.id, nextState);
+      clients.set(socket.id, finalState);
 
       const resultPayload = {
         socketId: socket.id,
-        finalReels: spin.finalReels,
-        isWin: spin.isWin,
-        resultText: spin.resultText,
+        finalReels: nextReels,
+        isWin: settle.isWin,
+        resultText: settle.resultText,
         mode,
-        locked: isLocked
+        locked
       } as const;
 
       socket.emit("server:pullResult", resultPayload);
-      emitClientState(io, socket.id, nextState);
+      emitClientState(io, socket.id, finalState);
       emitSnapshot(io);
 
-      if (spin.isWin) {
+      if (settle.isWin) {
         io.emit("server:confetti", {
           socketId: socket.id,
-          name: nextState.name,
-          finalReels: spin.finalReels,
+          name: finalState.name,
+          finalReels: nextReels,
           triggeredAt: Date.now()
         });
       }
 
       ackOk(ack, {
-        result: resultPayload,
-        state: nextState
+        socketId: socket.id,
+        reelId,
+        stopIndex,
+        symbol,
+        completed: true,
+        state: finalState,
+        result: resultPayload
       });
     });
 
@@ -141,6 +249,11 @@ export function registerSocketHandlers(io: TypedIo): void {
 
       if (getMode() !== "practice") {
         ackError(ack, "RESET_NOT_ALLOWED", "client:reset 僅 practice 模式可用");
+        return;
+      }
+
+      if (current.phase === "spinning") {
+        ackError(ack, "SPINNING", "轉動中不可重置");
         return;
       }
 

@@ -1,4 +1,4 @@
-import type { GameMode, Reels } from "../../../shared/types.js";
+import type { GameMode, ReelId, Reels, StopIndex } from "../../../shared/types.js";
 
 // 固定 4 欄；每欄各自抽一個符號組成最後結果。
 const REEL_STRIPS = [
@@ -11,19 +11,13 @@ const REEL_STRIPS = [
 const WIN_REELS: Reels = ["複", "象", "公", "場"];
 const EMPTY_REELS: Reels = ["-", "-", "-", "-"];
 
-export interface SpinResult {
-  finalReels: Reels;
+export interface SettleResult {
   isWin: boolean;
   resultText: string;
 }
 
 export function getEmptyReels(): Reels {
   return EMPTY_REELS;
-}
-
-function pickOne<T>(items: readonly T[]): T {
-  const index = Math.floor(Math.random() * items.length);
-  return items[index] ?? items[0];
 }
 
 function reelsEqual(a: Reels, b: Reels): boolean {
@@ -37,25 +31,14 @@ function buildResultText(mode: GameMode, isWin: boolean): string {
   return isWin ? "練習中獎，可繼續挑戰" : "練習完成，再試一次";
 }
 
-/**
- * 進行一次拉霸，直接回傳最終結果。
- * 規則：
- * 1. 各欄獨立隨機。
- * 2. 四欄同時為「複 象 公 場」即視為中獎。
- * 3. resultText 依 mode 決定文案。
- */
-export function spinSlot(mode: GameMode): SpinResult {
-  const finalReels: Reels = [
-    pickOne(REEL_STRIPS[0]),
-    pickOne(REEL_STRIPS[1]),
-    pickOne(REEL_STRIPS[2]),
-    pickOne(REEL_STRIPS[3])
-  ];
+export function symbolAt(reelId: ReelId, stopIndex: StopIndex): string {
+  const strip = REEL_STRIPS[reelId - 1];
+  return strip[stopIndex] ?? strip[0];
+}
 
-  const isWin = reelsEqual(finalReels, WIN_REELS);
-
+export function settleByReels(mode: GameMode, reels: Reels): SettleResult {
+  const isWin = reelsEqual(reels, WIN_REELS);
   return {
-    finalReels,
     isWin,
     resultText: buildResultText(mode, isWin)
   };

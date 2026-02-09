@@ -2,6 +2,10 @@ export type GameMode = "practice" | "official";
 
 export type ClientPhase = "ready" | "spinning" | "locked";
 
+export type ReelId = 1 | 2 | 3 | 4;
+
+export type StopIndex = 0 | 1 | 2 | 3 | 4;
+
 export type Reels = readonly [string, string, string, string];
 
 export interface ClientState {
@@ -57,8 +61,22 @@ export interface JoinData {
 }
 
 export interface PullData {
-  result: PullResultPayload;
   state: ClientState;
+}
+
+export interface StopReelPayload {
+  reelId: ReelId;
+  stopIndex: StopIndex;
+}
+
+export interface StopReelData {
+  socketId: string;
+  reelId: ReelId;
+  stopIndex: StopIndex;
+  symbol: string;
+  completed: boolean;
+  state: ClientState;
+  result?: PullResultPayload;
 }
 
 export interface ResetData {
@@ -89,6 +107,7 @@ export type Ack<T> = AckOk<T> | AckError;
 export interface ClientToServerEvents {
   "client:join": (name: string, ack?: (response: Ack<JoinData>) => void) => void;
   "client:pull": (ack?: (response: Ack<PullData>) => void) => void;
+  "client:stopReel": (payload: StopReelPayload, ack?: (response: Ack<StopReelData>) => void) => void;
   "client:reset": (ack?: (response: Ack<ResetData>) => void) => void;
   "admin:setMode": (mode: GameMode, ack?: (response: Ack<ModePayload>) => void) => void;
   "admin:resetOne": (socketId: string, ack?: (response: Ack<ResetData>) => void) => void;

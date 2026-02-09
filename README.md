@@ -16,7 +16,8 @@ npm run dev
 
 - 前台先填姓名，再進入四欄滾輪拉霸。
 - 轉動時使用單一「停止」按鈕，依序由左到右停下 Reel1 -> Reel4。
-- 每次 `pull` 的最終結果（`finalReels`、`isWin`、`resultText`）由後端決定並回傳。
+- 第 4 欄停下後，後端結算最終結果（`finalReels`、`isWin`、`resultText`）並回傳。
+- 每停一欄會即時送出 `stopReel` 到後端，後台可即時看到目前已停欄位。
 - 四欄內容與方向：
   - Reel1 上往下 `[複,0,1,2,3]`
   - Reel2 下往上 `[象,10,11,12,13]`

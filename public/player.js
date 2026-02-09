@@ -7,6 +7,7 @@ const REELS = [
   { reelId: 4, direction: "down_to_up", symbols: ["場", "30", "31", "32", "33"] }
 ];
 
+const EMPTY_REELS = ["-", "-", "-", "-"];
 const ITEM_HEIGHT = 48;
 
 const nameScreen = document.getElementById("name-screen");
@@ -24,12 +25,11 @@ const resultMsg = document.getElementById("result-msg");
 let joined = false;
 let joining = false;
 let pendingPull = false;
+let waitingStopAck = false;
 let mode = "practice";
 let playerName = localStorage.getItem("slot_player_name") || "";
 let ownState = null;
 let nextStopReel = 1;
-let pendingResult = null;
-let queuedFinalState = null;
 
 const reelRuntime = {
   1: { timer: null, position: 5, trackEl: document.getElementById("reel-track-1") },
@@ -85,6 +85,13 @@ function normalizePosition(reelId) {
   while (runtime.position >= symbolCount * 2) {
     runtime.position -= symbolCount;
   }
+}
+
+function currentStopIndex(reelId) {
+  const runtime = reelRuntime[reelId];
+  const symbolCount = REELS[reelId - 1].symbols.length;
+  const nearest = Math.round(runtime.position);
+  return ((nearest % symbolCount) + symbolCount) % symbolCount;
 }
 
 function setReelToSymbol(reelId, symbol, withTransition = false) {
@@ -187,23 +194,30 @@ function hasRunningReel() {
   return Object.values(reelRuntime).some((runtime) => Boolean(runtime.timer));
 }
 
-function shouldDeferFinalState(state) {
-  return ownState?.phase === "spinning" && nextStopReel <= 4 && state.phase !== "spinning";
+function nextStopFromReels(reels) {
+  for (let idx = 0; idx < reels.length; idx += 1) {
+    if (reels[idx] === "-") {
+      return idx + 1;
+    }
+  }
+  return 5;
 }
 
 function syncButtons() {
   const connected = socket.connected;
   const phase = getPhase();
   const canStop = Boolean(
-    joined && connected && phase === "spinning" && nextStopReel <= 4 && !pendingPull && pendingResult
+    joined && connected && phase === "spinning" && nextStopReel <= 4 && !pendingPull && !waitingStopAck
   );
 
-  spinBtn.disabled = !joined || !connected || pendingPull || phase !== "ready";
+  spinBtn.disabled = !joined || !connected || pendingPull || waitingStopAck || phase !== "ready";
   stopNextBtn.disabled = !canStop;
-  resetBtn.disabled = !joined || !connected || pendingPull || phase === "spinning" || mode !== "practice";
+  resetBtn.disabled = !joined || !connected || pendingPull || waitingStopAck || phase === "spinning" || mode !== "practice";
 
   if (phase === "spinning" && pendingPull) {
-    stopNextBtn.textContent = "結果計算中...";
+    stopNextBtn.textContent = "啟動中...";
+  } else if (phase === "spinning" && waitingStopAck) {
+    stopNextBtn.textContent = `停止第 ${nextStopReel} 欄...`;
   } else if (phase === "spinning" && nextStopReel <= 4) {
     stopNextBtn.textContent = `停止第 ${nextStopReel} 欄`;
   } else if (nextStopReel > 4) {
@@ -230,21 +244,23 @@ function syncView() {
 }
 
 function applyClientState(state) {
-  if (shouldDeferFinalState(state)) {
-    queuedFinalState = state;
-    return;
-  }
-
   ownState = state;
 
   if (state.phase === "spinning") {
     if (!hasRunningReel()) {
       startSpinAnimation();
     }
+
+    nextStopReel = nextStopFromReels(state.reels);
+    for (let index = 0; index < state.reels.length; index += 1) {
+      const symbol = state.reels[index];
+      if (symbol !== "-") {
+        stopReelAnimation(index + 1, symbol);
+      }
+    }
   } else {
     pendingPull = false;
-    pendingResult = null;
-    queuedFinalState = null;
+    waitingStopAck = false;
     nextStopReel = 1;
     stopAllAnimations();
     renderReelsByState(state);
@@ -255,28 +271,6 @@ function applyClientState(state) {
     setMessage(lockedText);
   }
 
-  syncView();
-}
-
-function applyResultAfterStops(result) {
-  if (queuedFinalState) {
-    ownState = queuedFinalState;
-    queuedFinalState = null;
-  } else if (ownState) {
-    ownState = {
-      ...ownState,
-      phase: result.locked ? "locked" : "ready",
-      reels: result.finalReels,
-      finalReels: result.finalReels,
-      isWin: result.isWin
-    };
-  }
-
-  pendingPull = false;
-  pendingResult = null;
-
-  const suffix = result.locked ? "（等待後台 reset）" : "";
-  setMessage(`${result.resultText}${suffix}`);
   syncView();
 }
 
@@ -335,31 +329,41 @@ function submitJoin(event) {
 }
 
 function emitSpin() {
-  if (!joined || pendingPull || getPhase() !== "ready") {
+  if (!joined || pendingPull || waitingStopAck || getPhase() !== "ready") {
     return;
   }
 
+  const previousState = ownState;
+
   nextStopReel = 1;
   pendingPull = true;
-  pendingResult = null;
-  queuedFinalState = null;
-
-  if (ownState) {
-    ownState = { ...ownState, phase: "spinning" };
-  }
+  waitingStopAck = false;
+  ownState = {
+    name: previousState?.name || playerName || "玩家",
+    phase: "spinning",
+    reels: [...EMPTY_REELS],
+    finalReels: null,
+    isWin: false
+  };
 
   startSpinAnimation();
   syncButtons();
 
   socket.emit("client:pull", (ack) => {
-    if (ack?.ok) {
+    pendingPull = false;
+
+    if (!ack?.ok) {
+      ownState = previousState;
+      stopAllAnimations();
+      if (ownState) {
+        renderReelsByState(ownState);
+      }
+      setMessage(ack?.error || "拉霸失敗，請稍後再試", "error");
+      syncView();
       return;
     }
 
-    pendingPull = false;
-    stopAllAnimations();
-    setMessage(ack?.error || "拉霸失敗，請稍後再試", "error");
-    syncButtons();
+    applyClientState(ack.data.state);
   });
 }
 
@@ -383,22 +387,36 @@ function emitStopNext() {
   if (getPhase() !== "spinning") {
     return;
   }
-
-  if (pendingPull || !pendingResult || nextStopReel > 4) {
+  if (pendingPull || waitingStopAck || nextStopReel > 4) {
     return;
   }
 
   const reelId = nextStopReel;
-  const finalSymbol = pendingResult.finalReels[reelId - 1];
-  stopReelAnimation(reelId, finalSymbol);
-
-  nextStopReel += 1;
-  if (nextStopReel > 4) {
-    applyResultAfterStops(pendingResult);
-    return;
-  }
-
+  const stopIndex = currentStopIndex(reelId);
+  waitingStopAck = true;
   syncButtons();
+
+  socket.emit("client:stopReel", { reelId, stopIndex }, (ack) => {
+    waitingStopAck = false;
+
+    if (!ack?.ok) {
+      setMessage(ack?.error || "停止失敗，請重試", "error");
+      syncButtons();
+      return;
+    }
+
+    stopReelAnimation(reelId, ack.data.symbol);
+    nextStopReel = Math.max(nextStopReel, reelId + 1);
+
+    applyClientState(ack.data.state);
+
+    if (ack.data.completed && ack.data.result) {
+      const suffix = ack.data.result.locked ? "（等待後台 reset）" : "";
+      setMessage(`${ack.data.result.resultText}${suffix}`);
+    }
+
+    syncButtons();
+  });
 }
 
 nameForm.addEventListener("submit", submitJoin);
@@ -421,8 +439,7 @@ socket.on("disconnect", () => {
   joined = false;
   joining = false;
   pendingPull = false;
-  pendingResult = null;
-  queuedFinalState = null;
+  waitingStopAck = false;
   nextStopReel = 1;
   ownState = null;
   stopAllAnimations();
@@ -451,8 +468,8 @@ socket.on("server:pullResult", (payload) => {
     return;
   }
 
-  pendingPull = false;
-  pendingResult = payload;
+  const suffix = payload.locked ? "（等待後台 reset）" : "";
+  setMessage(`${payload.resultText}${suffix}`);
   syncButtons();
 });
 
@@ -462,9 +479,7 @@ socket.on("server:error", (payload) => {
   }
 
   pendingPull = false;
-  if (getPhase() !== "spinning") {
-    pendingResult = null;
-  }
+  waitingStopAck = false;
   syncButtons();
 });
 
