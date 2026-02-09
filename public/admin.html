@@ -8,25 +8,17 @@
   </head>
   <body>
     <main class="admin-shell">
-      <section id="auth-panel" class="auth-panel">
-        <h1>後台登入</h1>
-        <form id="auth-form">
-          <input id="token-input" type="password" placeholder="Admin token" required />
-          <button type="submit">登入</button>
-        </form>
-        <p id="auth-msg"></p>
-      </section>
-
-      <section id="dashboard" class="dashboard hidden">
+      <section id="dashboard" class="dashboard">
         <header class="toolbar">
           <div class="left-tools">
             <h1>玩家監控儀表板</h1>
             <p id="stats-line"></p>
+            <p id="auth-msg" class="system-msg"></p>
           </div>
           <div class="right-tools">
             <button id="mode-practice" class="mode-btn">練習模式</button>
             <button id="mode-official" class="mode-btn">正式模式</button>
-            <button id="round-reset" class="reset-btn">回合 Reset</button>
+            <button id="round-reset" class="reset-btn">全部 Reset</button>
           </div>
         </header>
 

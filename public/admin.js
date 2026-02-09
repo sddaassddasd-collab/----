@@ -4,36 +4,36 @@ const PAGE_SIZE = 30;
 const MAX_COLS = 6;
 const MAX_ROWS = 5;
 
-const authPanel = document.getElementById("auth-panel");
 const dashboard = document.getElementById("dashboard");
-const authForm = document.getElementById("auth-form");
-const tokenInput = document.getElementById("token-input");
 const authMsg = document.getElementById("auth-msg");
-
 const statsLine = document.getElementById("stats-line");
 const gridEl = document.getElementById("grid");
 const modePracticeBtn = document.getElementById("mode-practice");
 const modeOfficialBtn = document.getElementById("mode-official");
 const roundResetBtn = document.getElementById("round-reset");
-
 const prevPageBtn = document.getElementById("prev-page");
 const nextPageBtn = document.getElementById("next-page");
 const pageInfo = document.getElementById("page-info");
 const confettiLayer = document.getElementById("confetti-layer");
 
-let authed = false;
 let mode = "practice";
-let roundId = "";
 let currentPage = 0;
 
 const players = new Map();
 
-function toStateText(state) {
-  if (state === "ready") return "待機";
-  if (state === "spinning") return "轉動中";
-  if (state === "result") return "已完成";
-  if (state === "locked_wait_admin") return "等待後台 reset";
-  return "未就緒";
+function showMessage(text, isError = false) {
+  if (!authMsg) {
+    return;
+  }
+  authMsg.textContent = text;
+  authMsg.style.color = isError ? "#b91c1c" : "#0f766e";
+}
+
+function toStateText(phase) {
+  if (phase === "ready") return "待機";
+  if (phase === "spinning") return "轉動中";
+  if (phase === "locked") return "等待後台 reset";
+  return "未知";
 }
 
 function chooseGrid(count, viewportAspect = 16 / 9) {
@@ -61,19 +61,18 @@ function chooseGrid(count, viewportAspect = 16 / 9) {
   return { rows: best.rows, cols: best.cols };
 }
 
-function connectedPlayersSorted() {
-  return [...players.values()]
-    .filter((p) => p.connected)
-    .sort((a, b) => {
-      if (a.connectedAt !== b.connectedAt) {
-        return a.connectedAt - b.connectedAt;
-      }
-      return a.name.localeCompare(b.name, "zh-Hant");
-    });
+function playersSorted() {
+  return [...players.entries()].sort((a, b) => {
+    const nameDiff = a[1].name.localeCompare(b[1].name, "zh-Hant");
+    if (nameDiff !== 0) {
+      return nameDiff;
+    }
+    return a[0].localeCompare(b[0]);
+  });
 }
 
 function pagedPlayers() {
-  const all = connectedPlayersSorted();
+  const all = playersSorted();
   const totalPages = Math.max(1, Math.ceil(all.length / PAGE_SIZE));
   currentPage = Math.min(Math.max(0, currentPage), totalPages - 1);
 
@@ -87,36 +86,72 @@ function pagedPlayers() {
   };
 }
 
-function createTile(player) {
+function stateSymbols(state) {
+  const symbols = state.finalReels || state.reels;
+  if (!Array.isArray(symbols)) {
+    return "- - - -";
+  }
+  return symbols.join(" ");
+}
+
+function stateMessage(state) {
+  if (state.phase === "locked" && !state.isWin) {
+    return "未中獎，等待後台 reset";
+  }
+  if (state.phase === "locked" && state.isWin) {
+    return "恭喜中獎，等待後台 reset";
+  }
+  if (state.isWin) {
+    return "中獎";
+  }
+  return "";
+}
+
+function resetOne(socketId) {
+  socket.emit("admin:resetOne", socketId, (ack) => {
+    if (ack?.ok) {
+      return;
+    }
+    showMessage(ack?.error || "單人重置失敗", true);
+  });
+}
+
+function createTile(socketId, state) {
   const tile = document.createElement("article");
   tile.className = "tile";
-  if (player.highlightedWinner) {
+  if (state.isWin) {
     tile.classList.add("winner");
   }
 
   const nameEl = document.createElement("div");
   nameEl.className = "tile-name";
-  nameEl.textContent = player.name;
+  nameEl.textContent = state.name;
 
-  const stateEl = document.createElement("div");
-  stateEl.className = "tile-state";
-  stateEl.textContent = toStateText(player.state);
+  const idEl = document.createElement("div");
+  idEl.className = "tile-id";
+  idEl.textContent = `ID ${socketId.slice(0, 8)}`;
+
+  const phaseEl = document.createElement("div");
+  phaseEl.className = "tile-state";
+  phaseEl.textContent = toStateText(state.phase);
 
   const symbolEl = document.createElement("div");
   symbolEl.className = "tile-symbols";
-  symbolEl.textContent = player.lastResult ? player.lastResult.symbols.join(" ") : "- - - -";
+  symbolEl.textContent = stateSymbols(state);
 
   const msgEl = document.createElement("div");
   msgEl.className = "tile-msg";
-  if (player.lastResult?.message) {
-    msgEl.textContent = player.lastResult.message;
-  } else if (player.lastResult?.isJackpot) {
-    msgEl.textContent = "練習中獎";
-  } else {
-    msgEl.textContent = "";
-  }
+  msgEl.textContent = stateMessage(state);
 
-  tile.append(nameEl, stateEl, symbolEl, msgEl);
+  const resetBtn = document.createElement("button");
+  resetBtn.className = "tile-reset";
+  resetBtn.textContent = "Reset 此人";
+  resetBtn.disabled = mode !== "official";
+  resetBtn.addEventListener("click", () => {
+    resetOne(socketId);
+  });
+
+  tile.append(nameEl, idEl, phaseEl, symbolEl, msgEl, resetBtn);
   return tile;
 }
 
@@ -124,13 +159,10 @@ function renderModeButtons() {
   modePracticeBtn.classList.toggle("active", mode === "practice");
   modeOfficialBtn.classList.toggle("active", mode === "official");
   roundResetBtn.disabled = mode !== "official";
+  roundResetBtn.textContent = "全部 Reset";
 }
 
 function renderGrid() {
-  if (!authed) {
-    return;
-  }
-
   const { all, totalPages, pageItems } = pagedPlayers();
   const viewportAspect = window.innerWidth / Math.max(window.innerHeight, 1);
   const { rows, cols } = chooseGrid(Math.max(pageItems.length, 1), viewportAspect);
@@ -139,22 +171,15 @@ function renderGrid() {
   gridEl.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
   gridEl.replaceChildren();
 
-  pageItems.forEach((player) => {
-    gridEl.appendChild(createTile(player));
+  pageItems.forEach(([socketId, state]) => {
+    gridEl.appendChild(createTile(socketId, state));
   });
 
-  statsLine.textContent = `連線玩家 ${all.length} 人 | Round ${roundId.slice(0, 8)} | 模式 ${mode === "official" ? "正式" : "練習"}`;
+  statsLine.textContent = `連線玩家 ${all.length} 人 | 模式 ${mode === "official" ? "正式" : "練習"}`;
   pageInfo.textContent = `第 ${currentPage + 1} / ${totalPages} 頁`;
-
   prevPageBtn.disabled = currentPage <= 0;
   nextPageBtn.disabled = currentPage >= totalPages - 1;
-
   renderModeButtons();
-}
-
-function showAuthMessage(text, isError = true) {
-  authMsg.textContent = text;
-  authMsg.style.color = isError ? "#b91c1c" : "#0f766e";
 }
 
 function burstConfetti() {
@@ -175,38 +200,41 @@ function burstConfetti() {
   }
 }
 
-authForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const token = tokenInput.value.trim();
-  if (!token) {
-    showAuthMessage("請輸入 token");
-    return;
-  }
+function applySnapshot(snapshot) {
+  mode = snapshot.mode;
+  players.clear();
+  Object.entries(snapshot.clients).forEach(([socketId, state]) => {
+    players.set(socketId, state);
+  });
+  renderGrid();
+}
 
-  socket.emit("admin:auth", { token }, (ack) => {
-    if (!ack?.ok) {
-      showAuthMessage("登入失敗，請檢查 token");
+modePracticeBtn.addEventListener("click", () => {
+  socket.emit("admin:setMode", "practice", (ack) => {
+    if (ack?.ok) {
       return;
     }
-
-    authed = true;
-    authPanel.classList.add("hidden");
-    dashboard.classList.remove("hidden");
-    showAuthMessage("", false);
-    socket.emit("admin:sync:request");
+    showMessage(ack?.error || "切換練習模式失敗", true);
   });
 });
 
-modePracticeBtn.addEventListener("click", () => {
-  socket.emit("admin:mode:set", { mode: "practice" });
-});
-
 modeOfficialBtn.addEventListener("click", () => {
-  socket.emit("admin:mode:set", { mode: "official" });
+  socket.emit("admin:setMode", "official", (ack) => {
+    if (ack?.ok) {
+      return;
+    }
+    showMessage(ack?.error || "切換正式模式失敗", true);
+  });
 });
 
 roundResetBtn.addEventListener("click", () => {
-  socket.emit("admin:round:reset");
+  socket.emit("admin:resetAll", (ack) => {
+    if (!ack?.ok) {
+      showMessage(ack?.error || "全部重置失敗", true);
+      return;
+    }
+    showMessage(`已重置 ${ack.data.resetCount} 位玩家`);
+  });
 });
 
 prevPageBtn.addEventListener("click", () => {
@@ -221,57 +249,45 @@ nextPageBtn.addEventListener("click", () => {
 
 window.addEventListener("resize", renderGrid);
 
-socket.on("state:snapshot", (snapshot) => {
-  mode = snapshot.mode;
-  roundId = snapshot.round.roundId;
-
-  players.clear();
-  Object.values(snapshot.players).forEach((player) => {
-    players.set(player.playerId, player);
+socket.on("connect", () => {
+  showMessage("已連線");
+  socket.emit("state:get", (ack) => {
+    if (ack?.ok) {
+      applySnapshot(ack.data.snapshot);
+      return;
+    }
+    showMessage("同步狀態失敗", true);
   });
-
-  renderGrid();
 });
 
-socket.on("player:upsert", (player) => {
-  players.set(player.playerId, player);
-  renderGrid();
+socket.on("disconnect", () => {
+  showMessage("連線中斷，等待重連...", true);
 });
 
-socket.on("player:removed", (payload) => {
-  players.delete(payload.playerId);
-  renderGrid();
+socket.on("server:state", (payload) => {
+  applySnapshot(payload.snapshot);
 });
 
-socket.on("mode:changed", (payload) => {
+socket.on("server:mode", (payload) => {
   mode = payload.mode;
-  roundId = payload.roundId;
   renderGrid();
 });
 
-socket.on("round:reset", (payload) => {
-  roundId = payload.roundId;
-  currentPage = 0;
+socket.on("server:clientState", (payload) => {
+  players.set(payload.socketId, payload.state);
   renderGrid();
 });
 
-socket.on("winner:highlight", (payload) => {
-  const player = players.get(payload.playerId);
-  if (player) {
-    player.highlightedWinner = true;
-  }
-  renderGrid();
-});
-
-socket.on("ui:confetti", () => {
+socket.on("server:confetti", () => {
   burstConfetti();
 });
 
-socket.on("error:notice", (payload) => {
-  if (!authed || !payload?.message) {
+socket.on("server:error", (payload) => {
+  if (!payload?.message) {
     return;
   }
-  showAuthMessage(payload.message);
+  showMessage(payload.message, true);
 });
 
+dashboard.classList.remove("hidden");
 renderGrid();

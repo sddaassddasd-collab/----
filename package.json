@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/server.js",
+    "dev": "tsx watch server/src/index.ts",
+    "build": "tsc -p server/tsconfig.json",
+    "start": "node server/dist/server/src/index.js",
     "test": "vitest run"
   },
   "dependencies": {

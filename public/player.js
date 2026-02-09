@@ -21,20 +21,21 @@ const stopNextBtn = document.getElementById("stop-next-btn");
 const resetBtn = document.getElementById("reset-btn");
 const resultMsg = document.getElementById("result-msg");
 
-let playerId = null;
-let playerName = localStorage.getItem("slot_player_name") || "";
-let reconnectToken = localStorage.getItem("slot_reconnect_token") || "";
+let joined = false;
+let joining = false;
+let pendingPull = false;
 let mode = "practice";
-let ownSession = null;
-let currentSpinId = null;
+let playerName = localStorage.getItem("slot_player_name") || "";
+let ownState = null;
 let nextStopReel = 1;
-let waitingStopAck = false;
+let pendingResult = null;
+let queuedFinalState = null;
 
 const reelRuntime = {
-  1: { timer: null, position: 5, stopped: true, trackEl: document.getElementById("reel-track-1") },
-  2: { timer: null, position: 5, stopped: true, trackEl: document.getElementById("reel-track-2") },
-  3: { timer: null, position: 5, stopped: true, trackEl: document.getElementById("reel-track-3") },
-  4: { timer: null, position: 5, stopped: true, trackEl: document.getElementById("reel-track-4") }
+  1: { timer: null, position: 5, trackEl: document.getElementById("reel-track-1") },
+  2: { timer: null, position: 5, trackEl: document.getElementById("reel-track-2") },
+  3: { timer: null, position: 5, trackEl: document.getElementById("reel-track-3") },
+  4: { timer: null, position: 5, trackEl: document.getElementById("reel-track-4") }
 };
 
 if (playerName) {
@@ -55,8 +56,8 @@ function setConnection(connected) {
   connBadge.classList.toggle("offline", !connected);
 }
 
-function ownState() {
-  return ownSession ? ownSession.state : "name_input";
+function getPhase() {
+  return ownState?.phase || "ready";
 }
 
 function applyReelTransform(reelId, withTransition = false) {
@@ -66,7 +67,7 @@ function applyReelTransform(reelId, withTransition = false) {
   }
 
   runtime.trackEl.style.transition = withTransition
-    ? "transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1)"
+    ? "transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)"
     : "none";
 
   const offset = -((runtime.position - 1) * ITEM_HEIGHT);
@@ -84,13 +85,6 @@ function normalizePosition(reelId) {
   while (runtime.position >= symbolCount * 2) {
     runtime.position -= symbolCount;
   }
-}
-
-function currentStopIndex(reelId) {
-  const runtime = reelRuntime[reelId];
-  const symbolCount = REELS[reelId - 1].symbols.length;
-  const nearest = Math.round(runtime.position);
-  return ((nearest % symbolCount) + symbolCount) % symbolCount;
 }
 
 function setReelToSymbol(reelId, symbol, withTransition = false) {
@@ -140,9 +134,7 @@ function stopReelAnimation(reelId, finalSymbol) {
   if (runtime.timer) {
     clearInterval(runtime.timer);
   }
-
   runtime.timer = null;
-  runtime.stopped = true;
 
   if (typeof finalSymbol === "string") {
     setReelToSymbol(reelId, finalSymbol, true);
@@ -156,56 +148,75 @@ function stopAllAnimations() {
   stopReelAnimation(4);
 }
 
-function startSpinAnimation(spinId) {
-  currentSpinId = spinId;
-  nextStopReel = 1;
-  waitingStopAck = false;
+function startSpinAnimation() {
   setMessage("");
 
   for (const reel of REELS) {
     const runtime = reelRuntime[reel.reelId];
-
     if (runtime.timer) {
       clearInterval(runtime.timer);
     }
 
-    runtime.stopped = false;
-    const step = reel.direction === "up_to_down" ? 0.4 : -0.4;
-
+    const step = reel.direction === "up_to_down" ? 0.45 : -0.45;
     runtime.timer = setInterval(() => {
       runtime.position += step;
       normalizePosition(reel.reelId);
       applyReelTransform(reel.reelId, false);
-    }, 34 + reel.reelId * 4);
+    }, 34 + reel.reelId * 5);
+  }
+}
+
+function renderReelsByState(state) {
+  const target = state.finalReels || state.reels;
+  if (!Array.isArray(target)) {
+    resetReelSymbols();
+    return;
   }
 
-  syncButtons();
+  if (target.every((symbol) => symbol === "-")) {
+    resetReelSymbols();
+    return;
+  }
+
+  for (let i = 0; i < target.length; i += 1) {
+    setReelToSymbol(i + 1, target[i], false);
+  }
+}
+
+function hasRunningReel() {
+  return Object.values(reelRuntime).some((runtime) => Boolean(runtime.timer));
+}
+
+function shouldDeferFinalState(state) {
+  return ownState?.phase === "spinning" && nextStopReel <= 4 && state.phase !== "spinning";
 }
 
 function syncButtons() {
   const connected = socket.connected;
-  const state = ownState();
+  const phase = getPhase();
+  const canStop = Boolean(
+    joined && connected && phase === "spinning" && nextStopReel <= 4 && !pendingPull && pendingResult
+  );
 
-  spinBtn.disabled = !playerId || !connected || state !== "ready";
+  spinBtn.disabled = !joined || !connected || pendingPull || phase !== "ready";
+  stopNextBtn.disabled = !canStop;
+  resetBtn.disabled = !joined || !connected || pendingPull || phase === "spinning" || mode !== "practice";
 
-  const stopEnabled = Boolean(playerId && connected && state === "spinning" && nextStopReel <= 4 && !waitingStopAck);
-  stopNextBtn.disabled = !stopEnabled;
-
-  if (state === "spinning" && nextStopReel <= 4) {
-    stopNextBtn.textContent = waitingStopAck ? `停止第 ${nextStopReel} 欄...` : `停止第 ${nextStopReel} 欄`;
+  if (phase === "spinning" && pendingPull) {
+    stopNextBtn.textContent = "結果計算中...";
+  } else if (phase === "spinning" && nextStopReel <= 4) {
+    stopNextBtn.textContent = `停止第 ${nextStopReel} 欄`;
   } else if (nextStopReel > 4) {
     stopNextBtn.textContent = "停止完成";
   } else {
     stopNextBtn.textContent = "停止";
   }
-
-  resetBtn.disabled = !playerId || !connected || state === "spinning" || mode === "official";
 }
 
 function syncView() {
   modeBadge.textContent = toModeText(mode);
 
-  if (!playerId) {
+  if (!joined) {
     nameScreen.classList.remove("hidden");
     gameScreen.classList.add("hidden");
     syncButtons();
@@ -214,93 +225,180 @@ function syncView() {
 
   nameScreen.classList.add("hidden");
   gameScreen.classList.remove("hidden");
-
-  if (ownSession) {
-    welcomeText.textContent = `玩家：${ownSession.name}`;
-
-    if (ownSession.state !== "spinning") {
-      currentSpinId = ownSession.currentSpinId || null;
-      nextStopReel = 1;
-      waitingStopAck = false;
-      stopAllAnimations();
-
-      if (ownSession.lastResult) {
-        ownSession.lastResult.symbols.forEach((symbol, idx) => {
-          setReelToSymbol(idx + 1, symbol, false);
-        });
-      } else {
-        resetReelSymbols();
-      }
-    }
-  } else {
-    welcomeText.textContent = `玩家：${playerName}`;
-  }
-
+  welcomeText.textContent = `玩家：${ownState?.name || playerName}`;
   syncButtons();
 }
 
+function applyClientState(state) {
+  if (shouldDeferFinalState(state)) {
+    queuedFinalState = state;
+    return;
+  }
+
+  ownState = state;
+
+  if (state.phase === "spinning") {
+    if (!hasRunningReel()) {
+      startSpinAnimation();
+    }
+  } else {
+    pendingPull = false;
+    pendingResult = null;
+    queuedFinalState = null;
+    nextStopReel = 1;
+    stopAllAnimations();
+    renderReelsByState(state);
+  }
+
+  if (state.phase === "locked" && mode === "official") {
+    const lockedText = state.isWin ? "恭喜中獎（等待後台 reset）" : "太可惜了><（等待後台 reset）";
+    setMessage(lockedText);
+  }
+
+  syncView();
+}
+
+function applyResultAfterStops(result) {
+  if (queuedFinalState) {
+    ownState = queuedFinalState;
+    queuedFinalState = null;
+  } else if (ownState) {
+    ownState = {
+      ...ownState,
+      phase: result.locked ? "locked" : "ready",
+      reels: result.finalReels,
+      finalReels: result.finalReels,
+      isWin: result.isWin
+    };
+  }
+
+  pendingPull = false;
+  pendingResult = null;
+
+  const suffix = result.locked ? "（等待後台 reset）" : "";
+  setMessage(`${result.resultText}${suffix}`);
+  syncView();
+}
+
+function applySnapshot(snapshot) {
+  if (!snapshot) {
+    return;
+  }
+
+  mode = snapshot.mode;
+  const mine = snapshot.clients?.[socket.id];
+  if (joined && mine) {
+    applyClientState(mine);
+    return;
+  }
+
+  syncView();
+}
+
 function joinWithName(name) {
-  const payload = { name, reconnectToken };
-  socket.emit("player:join", payload, (ack) => {
-    playerId = ack.playerId;
-    reconnectToken = ack.reconnectToken;
-    mode = ack.mode;
-    playerName = name;
+  if (joining) {
+    return;
+  }
 
+  const trimmed = name.trim();
+  if (!trimmed) {
+    setMessage("請先輸入姓名", "error");
+    return;
+  }
+
+  joining = true;
+  socket.emit("client:join", trimmed, (ack) => {
+    joining = false;
+
+    if (!ack?.ok) {
+      setMessage(ack?.error || "加入失敗，請稍後再試", "error");
+      return;
+    }
+
+    joined = true;
+    mode = ack.data.mode;
+    playerName = trimmed;
     localStorage.setItem("slot_player_name", playerName);
-    localStorage.setItem("slot_reconnect_token", reconnectToken);
 
-    socket.emit("player:sync:request");
-    syncView();
+    applyClientState(ack.data.state);
+    socket.emit("state:get", (snapshotAck) => {
+      if (snapshotAck?.ok) {
+        applySnapshot(snapshotAck.data.snapshot);
+      }
+    });
   });
 }
 
 function submitJoin(event) {
   event.preventDefault();
-  const name = nameInput.value.trim();
-  if (!name) {
-    setMessage("請先輸入姓名", "error");
-    return;
-  }
-  joinWithName(name);
+  joinWithName(nameInput.value || "");
 }
 
 function emitSpin() {
-  if (ownState() !== "ready") {
+  if (!joined || pendingPull || getPhase() !== "ready") {
     return;
   }
 
-  const clientReqId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  socket.emit("player:spin:start", { clientReqId });
+  nextStopReel = 1;
+  pendingPull = true;
+  pendingResult = null;
+  queuedFinalState = null;
+
+  if (ownState) {
+    ownState = { ...ownState, phase: "spinning" };
+  }
+
+  startSpinAnimation();
+  syncButtons();
+
+  socket.emit("client:pull", (ack) => {
+    if (ack?.ok) {
+      return;
+    }
+
+    pendingPull = false;
+    stopAllAnimations();
+    setMessage(ack?.error || "拉霸失敗，請稍後再試", "error");
+    syncButtons();
+  });
 }
 
 function emitReset() {
-  if (!playerId) {
+  if (!joined) {
     return;
   }
 
-  socket.emit("player:reset:request");
+  socket.emit("client:reset", (ack) => {
+    if (!ack?.ok) {
+      setMessage(ack?.error || "重置失敗", "error");
+      return;
+    }
+
+    applyClientState(ack.data.state);
+    setMessage("已重置，可重新開始");
+  });
 }
 
 function emitStopNext() {
-  if (ownState() !== "spinning" || !currentSpinId) {
+  if (getPhase() !== "spinning") {
     return;
   }
 
-  if (nextStopReel > 4 || waitingStopAck) {
+  if (pendingPull || !pendingResult || nextStopReel > 4) {
     return;
   }
 
   const reelId = nextStopReel;
-  const stopIndex = currentStopIndex(reelId);
-  waitingStopAck = true;
-  syncButtons();
+  const finalSymbol = pendingResult.finalReels[reelId - 1];
+  stopReelAnimation(reelId, finalSymbol);
 
-  socket.emit("player:reel:stop", {
-    spinId: currentSpinId,
-    reelId,
-    stopIndex
-  });
+  nextStopReel += 1;
+  if (nextStopReel > 4) {
+    applyResultAfterStops(pendingResult);
+    return;
+  }
+
+  syncButtons();
 }
 
 nameForm.addEventListener("submit", submitJoin);
@@ -310,104 +408,63 @@ resetBtn.addEventListener("click", emitReset);
 
 socket.on("connect", () => {
   setConnection(true);
-  if (playerName && reconnectToken) {
+
+  if (playerName) {
     joinWithName(playerName);
+  } else {
+    syncView();
   }
-  syncButtons();
 });
 
 socket.on("disconnect", () => {
   setConnection(false);
-  syncButtons();
-});
-
-socket.on("state:snapshot", (snapshot) => {
-  mode = snapshot.mode;
-  if (playerId && snapshot.players[playerId]) {
-    ownSession = snapshot.players[playerId];
-  }
+  joined = false;
+  joining = false;
+  pendingPull = false;
+  pendingResult = null;
+  queuedFinalState = null;
+  nextStopReel = 1;
+  ownState = null;
+  stopAllAnimations();
   syncView();
 });
 
-socket.on("player:upsert", (player) => {
-  if (player.playerId !== playerId) {
-    return;
-  }
-  ownSession = player;
-  syncView();
+socket.on("server:state", (payload) => {
+  applySnapshot(payload.snapshot);
 });
 
-socket.on("mode:changed", (payload) => {
+socket.on("server:mode", (payload) => {
   mode = payload.mode;
   syncView();
 });
 
-socket.on("spin:started", (payload) => {
-  if (payload.playerId !== playerId) {
+socket.on("server:clientState", (payload) => {
+  if (payload.socketId !== socket.id) {
     return;
   }
-  startSpinAnimation(payload.spinId);
+  joined = true;
+  applyClientState(payload.state);
 });
 
-socket.on("spin:reel_stopped", (payload) => {
-  if (payload.playerId !== playerId || payload.spinId !== currentSpinId) {
-    return;
-  }
-
-  stopReelAnimation(payload.reelId, payload.symbol);
-
-  if (payload.reelId === nextStopReel) {
-    nextStopReel += 1;
-  } else {
-    nextStopReel = Math.max(nextStopReel, payload.reelId + 1);
-  }
-
-  waitingStopAck = false;
-  syncButtons();
-});
-
-socket.on("spin:finished", (payload) => {
-  if (payload.playerId !== playerId) {
+socket.on("server:pullResult", (payload) => {
+  if (payload.socketId !== socket.id) {
     return;
   }
 
-  currentSpinId = null;
-  nextStopReel = 5;
-  waitingStopAck = false;
-  stopAllAnimations();
-
-  const { result } = payload;
-  result.symbols.forEach((symbol, idx) => {
-    setReelToSymbol(idx + 1, symbol, true);
-  });
-
-  if (mode === "official") {
-    setMessage(result.message || "");
-  } else if (result.isJackpot) {
-    setMessage("練習成功！複 象 公 場");
-  } else {
-    setMessage("練習完成，可再試一次");
-  }
-
+  pendingPull = false;
+  pendingResult = payload;
   syncButtons();
 });
 
-socket.on("round:reset", () => {
-  currentSpinId = null;
-  nextStopReel = 1;
-  waitingStopAck = false;
-  stopAllAnimations();
-  resetReelSymbols();
-  setMessage("已由後台重置，可重新開始");
-  syncButtons();
-});
-
-socket.on("error:notice", (payload) => {
-  if (payload && payload.message) {
+socket.on("server:error", (payload) => {
+  if (payload?.message) {
     setMessage(payload.message, "error");
   }
 
-  waitingStopAck = false;
+  pendingPull = false;
+  if (getPhase() !== "spinning") {
+    pendingResult = null;
+  }
   syncButtons();
 });
 

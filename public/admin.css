@@ -101,6 +101,11 @@ body {
   font-weight: 600;
 }
 
+.system-msg {
+  min-height: 1.2em;
+  font-size: 0.86rem;
+}
+
 .right-tools {
   display: flex;
   gap: 8px;
@@ -163,6 +168,12 @@ body {
   font-size: 0.85rem;
 }
 
+.tile-id {
+  color: #64748b;
+  font-size: 0.76rem;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
 .tile-symbols {
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -171,6 +182,22 @@ body {
 .tile-msg {
   color: var(--muted);
   font-size: 0.88rem;
+  min-height: 1.2em;
+}
+
+.tile-reset {
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: #334155;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.tile-reset:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .tile.winner {
