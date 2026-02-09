@@ -12,6 +12,14 @@ npm run dev
 - 前台：`http://localhost:3000/player`
 - 後台：`http://localhost:3000/admin`
 
+## React 前台（Vite）
+
+```bash
+npm run client:dev
+```
+
+預設啟動於 `http://localhost:5173`，可透過 `VITE_SOCKET_URL` 指到後端位址。
+
 ## 功能對應
 
 - 前台先填姓名，再進入四欄滾輪拉霸。

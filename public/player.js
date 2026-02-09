@@ -1,10 +1,10 @@
 const socket = io();
 
 const REELS = [
-  { reelId: 1, direction: "up_to_down", symbols: ["複", "0", "1", "2", "3"] },
-  { reelId: 2, direction: "down_to_up", symbols: ["象", "10", "11", "12", "13"] },
-  { reelId: 3, direction: "up_to_down", symbols: ["公", "20", "21", "22", "23"] },
-  { reelId: 4, direction: "down_to_up", symbols: ["場", "30", "31", "32", "33"] }
+  { reelId: 1, direction: "up_to_down", symbols: ["複", "復", "附", "負", "腹"] },
+  { reelId: 2, direction: "down_to_up", symbols: ["象", "向", "像", "相", "項"] },
+  { reelId: 3, direction: "up_to_down", symbols: ["公", "工", "攻", "功", "恭"] },
+  { reelId: 4, direction: "down_to_up", symbols: ["場", "廠", "昶", "敞", "厂"] }
 ];
 
 const EMPTY_REELS = ["-", "-", "-", "-"];
@@ -164,7 +164,7 @@ function startSpinAnimation() {
       clearInterval(runtime.timer);
     }
 
-    const step = reel.direction === "up_to_down" ? 0.1 : -0.1;
+    const step = reel.direction === "up_to_down" ? 0.4 : -0.4;
     runtime.timer = setInterval(() => {
       runtime.position += step;
       normalizePosition(reel.reelId);
