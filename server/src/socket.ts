@@ -4,19 +4,25 @@ import type {
   ClientToServerEvents,
   GameMode,
   InterServerEvents,
+  JoinPayload,
   ReelId,
   Reels,
   ServerToClientEvents,
   StopIndex,
   SocketData
 } from "../../shared/types.js";
+import { randomBytes } from "node:crypto";
 import { Server, type Socket } from "socket.io";
 import { isAdminSessionValid, readAdminSessionId, touchAdminSession } from "./adminAuth.js";
 import { getEmptyReels, settleByReels, symbolAt } from "./logic/slotLogic.js";
-import { clients, createInitialClientState, getMode, resetClientState, setMode, toSnapshot } from "./state.js";
+import { clients, createInitialClientState, getMode, setMode, toSnapshot } from "./state.js";
 
 type TypedIo = Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
 type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
+
+const reconnectStates = new Map<string, ClientState>();
+const socketToReconnectToken = new Map<string, string>();
+const reconnectTokenToSocket = new Map<string, string>();
 
 function ackOk<T>(ack: ((response: Ack<T>) => void) | undefined, data: T): void {
   if (!ack) {
@@ -99,13 +105,117 @@ function withReelSymbol(reels: Reels, reelId: ReelId, symbol: string): Reels {
   return next;
 }
 
+function parseJoinPayload(payload: JoinPayload | string): { name: string; reconnectToken: string } {
+  if (typeof payload === "string") {
+    return {
+      name: payload,
+      reconnectToken: ""
+    };
+  }
+
+  return {
+    name: typeof payload?.name === "string" ? payload.name : "",
+    reconnectToken: typeof payload?.reconnectToken === "string" ? payload.reconnectToken.trim() : ""
+  };
+}
+
+function createReconnectToken(): string {
+  let token = "";
+  do {
+    token = randomBytes(24).toString("hex");
+  } while (reconnectStates.has(token));
+  return token;
+}
+
+function getReconnectTokenBySocketId(socketId: string): string | null {
+  return socketToReconnectToken.get(socketId) ?? null;
+}
+
+function getClientStateBySocketId(socketId: string): ClientState | null {
+  const reconnectToken = getReconnectTokenBySocketId(socketId);
+  if (!reconnectToken) {
+    return null;
+  }
+  return reconnectStates.get(reconnectToken) ?? null;
+}
+
+function bindSocketToClient(socketId: string, reconnectToken: string, state: ClientState): void {
+  const previousSocketId = reconnectTokenToSocket.get(reconnectToken);
+  if (previousSocketId && previousSocketId !== socketId) {
+    clients.delete(previousSocketId);
+    socketToReconnectToken.delete(previousSocketId);
+  }
+
+  socketToReconnectToken.set(socketId, reconnectToken);
+  reconnectTokenToSocket.set(reconnectToken, socketId);
+  clients.set(socketId, state);
+}
+
+function detachSocketFromClient(socketId: string): void {
+  const reconnectToken = socketToReconnectToken.get(socketId);
+  socketToReconnectToken.delete(socketId);
+  clients.delete(socketId);
+
+  if (!reconnectToken) {
+    return;
+  }
+  if (reconnectTokenToSocket.get(reconnectToken) === socketId) {
+    reconnectTokenToSocket.delete(reconnectToken);
+  }
+}
+
+function attachClient(socketId: string, name: string, reconnectTokenInput: string): { reconnectToken: string; state: ClientState } {
+  const candidateToken = reconnectTokenInput.trim();
+  const hasExisting = candidateToken.length > 0 && reconnectStates.has(candidateToken);
+  const reconnectToken = hasExisting ? candidateToken : createReconnectToken();
+  const previousState = reconnectStates.get(reconnectToken);
+  const state = previousState
+    ? {
+        ...previousState,
+        name
+      }
+    : createInitialClientState(name);
+
+  reconnectStates.set(reconnectToken, state);
+  bindSocketToClient(socketId, reconnectToken, state);
+  return { reconnectToken, state };
+}
+
+function setClientStateForSocket(socketId: string, nextState: ClientState): boolean {
+  const reconnectToken = getReconnectTokenBySocketId(socketId);
+  if (!reconnectToken) {
+    return false;
+  }
+  reconnectStates.set(reconnectToken, nextState);
+  clients.set(socketId, nextState);
+  return true;
+}
+
+function resetClientStateForSocket(socketId: string): ClientState | null {
+  const current = getClientStateBySocketId(socketId);
+  if (!current) {
+    return null;
+  }
+  const resetState = createInitialClientState(current.name);
+  const ok = setClientStateForSocket(socketId, resetState);
+  return ok ? resetState : null;
+}
+
 function unlockLockedClientsForPractice(io: TypedIo): void {
-  for (const [socketId, state] of clients.entries()) {
-    if (state.phase === "locked") {
-      const nextState: ClientState = { ...state, phase: "ready" };
-      clients.set(socketId, nextState);
-      emitClientState(io, socketId, nextState);
+  for (const [reconnectToken, state] of reconnectStates.entries()) {
+    if (state.phase !== "locked") {
+      continue;
     }
+
+    const nextState: ClientState = { ...state, phase: "ready" };
+    reconnectStates.set(reconnectToken, nextState);
+
+    const socketId = reconnectTokenToSocket.get(reconnectToken);
+    if (!socketId) {
+      continue;
+    }
+    clients.set(socketId, nextState);
+    emitClientState(io, socketId, nextState);
   }
 }
 
@@ -125,22 +235,23 @@ export function registerSocketHandlers(io: TypedIo): void {
   io.on("connection", (socket) => {
     hydrateAdminAuth(socket);
 
-    socket.on("client:join", (name, ack) => {
-      const safeName = sanitizeName(typeof name === "string" ? name : "");
-      const state = createInitialClientState(safeName);
-      clients.set(socket.id, state);
+    socket.on("client:join", (payload, ack) => {
+      const parsed = parseJoinPayload(payload);
+      const safeName = sanitizeName(parsed.name);
+      const joined = attachClient(socket.id, safeName, parsed.reconnectToken);
 
-      emitClientState(io, socket.id, state);
+      emitClientState(io, socket.id, joined.state);
       emitSnapshot(io);
 
       ackOk(ack, {
         mode: getMode(),
-        state
+        state: joined.state,
+        reconnectToken: joined.reconnectToken
       });
     });
 
     socket.on("client:pull", (ack) => {
-      const current = clients.get(socket.id);
+      const current = getClientStateBySocketId(socket.id);
       if (!current) {
         ackError(ack, "NOT_JOINED", "請先執行 client:join(name)");
         return;
@@ -164,7 +275,10 @@ export function registerSocketHandlers(io: TypedIo): void {
         finalReels: null,
         isWin: false
       };
-      clients.set(socket.id, spinning);
+      if (!setClientStateForSocket(socket.id, spinning)) {
+        ackError(ack, "NOT_JOINED", "請先執行 client:join(name)");
+        return;
+      }
       emitClientState(io, socket.id, spinning);
       emitSnapshot(io);
 
@@ -172,7 +286,7 @@ export function registerSocketHandlers(io: TypedIo): void {
     });
 
     socket.on("client:stopReel", (payload, ack) => {
-      const current = clients.get(socket.id);
+      const current = getClientStateBySocketId(socket.id);
       if (!current) {
         ackError(ack, "NOT_JOINED", "請先執行 client:join(name)");
         return;
@@ -216,7 +330,10 @@ export function registerSocketHandlers(io: TypedIo): void {
           finalReels: null,
           isWin: false
         };
-        clients.set(socket.id, nextState);
+        if (!setClientStateForSocket(socket.id, nextState)) {
+          ackError(ack, "NOT_JOINED", "請先執行 client:join(name)");
+          return;
+        }
 
         emitClientState(io, socket.id, nextState);
         emitSnapshot(io);
@@ -241,7 +358,10 @@ export function registerSocketHandlers(io: TypedIo): void {
         finalReels: nextReels,
         isWin: settle.isWin
       };
-      clients.set(socket.id, finalState);
+      if (!setClientStateForSocket(socket.id, finalState)) {
+        ackError(ack, "NOT_JOINED", "請先執行 client:join(name)");
+        return;
+      }
 
       const resultPayload = {
         socketId: socket.id,
@@ -277,7 +397,7 @@ export function registerSocketHandlers(io: TypedIo): void {
     });
 
     socket.on("client:reset", (ack) => {
-      const current = clients.get(socket.id);
+      const current = getClientStateBySocketId(socket.id);
       if (!current) {
         ackError(ack, "NOT_JOINED", "請先執行 client:join(name)");
         return;
@@ -293,7 +413,7 @@ export function registerSocketHandlers(io: TypedIo): void {
         return;
       }
 
-      const resetState = resetClientState(socket.id);
+      const resetState = resetClientStateForSocket(socket.id);
       if (!resetState) {
         ackError(ack, "NOT_FOUND", "找不到玩家狀態");
         return;
@@ -340,7 +460,7 @@ export function registerSocketHandlers(io: TypedIo): void {
         return;
       }
 
-      const state = resetClientState(targetSocketId);
+      const state = resetClientStateForSocket(targetSocketId);
       if (!state) {
         ackError(ack, "RESET_FAILED", "重置失敗");
         return;
@@ -362,13 +482,17 @@ export function registerSocketHandlers(io: TypedIo): void {
       }
 
       let resetCount = 0;
-      for (const socketId of clients.keys()) {
-        const state = resetClientState(socketId);
-        if (!state) {
+      for (const [reconnectToken, state] of reconnectStates.entries()) {
+        const resetState = createInitialClientState(state.name);
+        reconnectStates.set(reconnectToken, resetState);
+
+        const socketId = reconnectTokenToSocket.get(reconnectToken);
+        if (!socketId) {
           continue;
         }
         resetCount += 1;
-        emitClientState(io, socketId, state);
+        clients.set(socketId, resetState);
+        emitClientState(io, socketId, resetState);
       }
 
       emitSnapshot(io);
@@ -381,6 +505,9 @@ export function registerSocketHandlers(io: TypedIo): void {
       }
 
       const rebindCount = clients.size;
+      reconnectStates.clear();
+      socketToReconnectToken.clear();
+      reconnectTokenToSocket.clear();
       clients.clear();
 
       io.emit("server:forceRebind", {
@@ -396,7 +523,7 @@ export function registerSocketHandlers(io: TypedIo): void {
     });
 
     socket.on("disconnect", () => {
-      clients.delete(socket.id);
+      detachSocketFromClient(socket.id);
       emitSnapshot(io);
     });
   });

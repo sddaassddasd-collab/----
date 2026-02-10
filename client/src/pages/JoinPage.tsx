@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ensureSocketConnected, joinClient } from "../app/socket";
 
 const NAME_STORAGE_KEY = "slot_player_name";
+const RECONNECT_TOKEN_STORAGE_KEY = "slot_reconnect_token";
 
 export default function JoinPage() {
   const navigate = useNavigate();
@@ -24,7 +25,11 @@ export default function JoinPage() {
 
     try {
       await ensureSocketConnected();
-      const ack = await joinClient(trimmedName);
+      const savedReconnectToken = (localStorage.getItem(RECONNECT_TOKEN_STORAGE_KEY) ?? "").trim();
+      const ack = await joinClient({
+        name: trimmedName,
+        reconnectToken: savedReconnectToken || undefined
+      });
 
       if (!ack.ok) {
         setError(ack.error);
@@ -33,6 +38,7 @@ export default function JoinPage() {
       }
 
       localStorage.setItem(NAME_STORAGE_KEY, trimmedName);
+      localStorage.setItem(RECONNECT_TOKEN_STORAGE_KEY, ack.data.reconnectToken);
       navigate("/slot", { replace: true });
     } catch {
       setError("連線失敗，請稍後再試");

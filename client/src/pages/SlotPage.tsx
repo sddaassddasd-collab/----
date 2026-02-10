@@ -3,8 +3,6 @@ import { useNavigate } from "react-router-dom";
 import type { ClientState, GameMode, ReelId, StopIndex } from "../../../shared/types";
 import {
   ensureSocketConnected,
-  fetchSnapshot,
-  getSelfState,
   getSocket,
   joinClient,
   pullSpin,
@@ -15,6 +13,7 @@ import ResultModal from "../components/slot/ResultModal";
 import SlotMachine from "../components/slot/SlotMachine";
 
 const NAME_STORAGE_KEY = "slot_player_name";
+const RECONNECT_TOKEN_STORAGE_KEY = "slot_reconnect_token";
 
 export default function SlotPage() {
   const navigate = useNavigate();
@@ -118,6 +117,7 @@ export default function SlotPage() {
 
     async function bootstrap() {
       const savedName = (localStorage.getItem(NAME_STORAGE_KEY) ?? "").trim();
+      const savedReconnectToken = (localStorage.getItem(RECONNECT_TOKEN_STORAGE_KEY) ?? "").trim();
       if (!savedName) {
         navigate("/", { replace: true });
         return;
@@ -130,27 +130,10 @@ export default function SlotPage() {
         }
         setConnected(true);
 
-        const currentSocketId = socket.id;
-        if (!currentSocketId) {
-          setError("連線初始化失敗");
-          return;
-        }
-
-        const snapshotAck = await fetchSnapshot();
-        if (!mounted) {
-          return;
-        }
-
-        if (snapshotAck.ok) {
-          setMode(snapshotAck.data.snapshot.mode);
-          const self = getSelfState(snapshotAck.data.snapshot, currentSocketId);
-          if (self) {
-            setClientState(self);
-            return;
-          }
-        }
-
-        const joinAck = await joinClient(savedName);
+        const joinAck = await joinClient({
+          name: savedName,
+          reconnectToken: savedReconnectToken || undefined
+        });
         if (!mounted) {
           return;
         }
@@ -162,6 +145,7 @@ export default function SlotPage() {
 
         setMode(joinAck.data.mode);
         setClientState(joinAck.data.state);
+        localStorage.setItem(RECONNECT_TOKEN_STORAGE_KEY, joinAck.data.reconnectToken);
       } catch {
         if (!mounted) {
           return;

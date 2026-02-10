@@ -9,6 +9,7 @@ const REELS = [
 
 const EMPTY_REELS = ["-", "-", "-", "-"];
 const ITEM_HEIGHT = 48;
+const RECONNECT_TOKEN_STORAGE_KEY = "slot_reconnect_token";
 
 const nameScreen = document.getElementById("name-screen");
 const gameScreen = document.getElementById("game-screen");
@@ -28,6 +29,7 @@ let pendingPull = false;
 let waitingStopAck = false;
 let mode = "practice";
 let playerName = localStorage.getItem("slot_player_name") || "";
+let reconnectToken = localStorage.getItem(RECONNECT_TOKEN_STORAGE_KEY) || "";
 let ownState = null;
 let nextStopReel = 1;
 
@@ -306,26 +308,35 @@ function joinWithName(name) {
   }
 
   joining = true;
-  socket.emit("client:join", trimmed, (ack) => {
-    joining = false;
+  socket.emit(
+    "client:join",
+    {
+      name: trimmed,
+      reconnectToken: reconnectToken || undefined
+    },
+    (ack) => {
+      joining = false;
 
-    if (!ack?.ok) {
-      setMessage(ack?.error || "加入失敗，請稍後再試", "error");
-      return;
-    }
-
-    joined = true;
-    mode = ack.data.mode;
-    playerName = trimmed;
-    localStorage.setItem("slot_player_name", playerName);
-
-    applyClientState(ack.data.state);
-    socket.emit("state:get", (snapshotAck) => {
-      if (snapshotAck?.ok) {
-        applySnapshot(snapshotAck.data.snapshot);
+      if (!ack?.ok) {
+        setMessage(ack?.error || "加入失敗，請稍後再試", "error");
+        return;
       }
-    });
-  });
+
+      joined = true;
+      mode = ack.data.mode;
+      playerName = trimmed;
+      reconnectToken = typeof ack.data.reconnectToken === "string" ? ack.data.reconnectToken : reconnectToken;
+      localStorage.setItem("slot_player_name", playerName);
+      localStorage.setItem(RECONNECT_TOKEN_STORAGE_KEY, reconnectToken);
+
+      applyClientState(ack.data.state);
+      socket.emit("state:get", (snapshotAck) => {
+        if (snapshotAck?.ok) {
+          applySnapshot(snapshotAck.data.snapshot);
+        }
+      });
+    }
+  );
 }
 
 function submitJoin(event) {
@@ -341,8 +352,10 @@ function forceRebind(message) {
   nextStopReel = 1;
   ownState = null;
   playerName = "";
+  reconnectToken = "";
   nameInput.value = "";
   localStorage.removeItem("slot_player_name");
+  localStorage.removeItem(RECONNECT_TOKEN_STORAGE_KEY);
   stopAllAnimations();
   resetReelSymbols();
   setMessage(message || "後台已重設，請重新輸入姓名", "error");

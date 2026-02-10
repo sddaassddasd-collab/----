@@ -4,6 +4,8 @@ import type {
   ClientState,
   ClientToServerEvents,
   GameMode,
+  JoinData,
+  JoinPayload,
   ModePayload,
   PullData,
   ResetAllData,
@@ -60,20 +62,15 @@ export async function ensureSocketConnected(): Promise<ClientSocket> {
   return socket;
 }
 
-export interface JoinSuccess {
-  mode: GameMode;
-  state: ClientState;
-}
-
 function emitWithAck<T>(emit: (ack: (response: Ack<T>) => void) => void): Promise<Ack<T>> {
   return new Promise((resolve) => {
     emit((response) => resolve(response));
   });
 }
 
-export function joinClient(name: string): Promise<Ack<JoinSuccess>> {
+export function joinClient(payload: JoinPayload): Promise<Ack<JoinData>> {
   const socket = getSocket();
-  return emitWithAck((ack) => socket.emit("client:join", name, ack));
+  return emitWithAck((ack) => socket.emit("client:join", payload, ack));
 }
 
 export function pullSpin(): Promise<Ack<PullData>> {

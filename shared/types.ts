@@ -58,6 +58,12 @@ export interface ErrorPayload {
 export interface JoinData {
   mode: GameMode;
   state: ClientState;
+  reconnectToken: string;
+}
+
+export interface JoinPayload {
+  name: string;
+  reconnectToken?: string;
 }
 
 export interface PullData {
@@ -114,7 +120,7 @@ export interface AckError {
 export type Ack<T> = AckOk<T> | AckError;
 
 export interface ClientToServerEvents {
-  "client:join": (name: string, ack?: (response: Ack<JoinData>) => void) => void;
+  "client:join": (payload: JoinPayload, ack?: (response: Ack<JoinData>) => void) => void;
   "client:pull": (ack?: (response: Ack<PullData>) => void) => void;
   "client:stopReel": (payload: StopReelPayload, ack?: (response: Ack<StopReelData>) => void) => void;
   "client:reset": (ack?: (response: Ack<ResetData>) => void) => void;
