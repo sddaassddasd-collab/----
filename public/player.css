@@ -229,6 +229,39 @@ body {
   color: var(--danger);
 }
 
+@media (max-width: 699px) and (orientation: portrait) {
+  :root {
+    --reel-item-h: 40px;
+    --reel-window-h: calc(var(--reel-item-h) * 3);
+  }
+
+  .reel-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .reel-card {
+    min-width: 0;
+    padding: 8px 6px 10px;
+  }
+
+  .reel-title {
+    margin-bottom: 6px;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+  }
+
+  .reel-item {
+    font-size: 1.35rem;
+  }
+
+  .reel-center-line {
+    left: 4px;
+    right: 4px;
+    border-width: 1px;
+  }
+}
+
 @media (min-width: 700px) {
   .reel-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
