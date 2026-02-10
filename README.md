@@ -4,13 +4,16 @@
 
 ```bash
 npm install
-npm run dev
+ADMIN_TOKEN=請換成你的密碼 npm run dev
 ```
 
 預設啟動於 `http://localhost:3000`
 
 - 前台：`http://localhost:3000/player`
 - 後台：`http://localhost:3000/admin`
+
+> `ADMIN_TOKEN` 為後台登入 token，未設定時後台無法登入。  
+> 可選：`ADMIN_SESSION_TTL_MS`（預設 12 小時）設定 admin session 有效時間。
 
 ## React 前台（Vite）
 

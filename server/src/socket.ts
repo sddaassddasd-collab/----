@@ -10,11 +10,13 @@ import type {
   StopIndex,
   SocketData
 } from "../../shared/types.js";
-import { Server } from "socket.io";
+import { Server, type Socket } from "socket.io";
+import { isAdminSessionValid, readAdminSessionId, touchAdminSession } from "./adminAuth.js";
 import { getEmptyReels, settleByReels, symbolAt } from "./logic/slotLogic.js";
 import { clients, createInitialClientState, getMode, resetClientState, setMode, toSnapshot } from "./state.js";
 
 type TypedIo = Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
+type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
 
 function ackOk<T>(ack: ((response: Ack<T>) => void) | undefined, data: T): void {
   if (!ack) {
@@ -36,6 +38,37 @@ function emitSnapshot(io: TypedIo): void {
 
 function emitClientState(io: TypedIo, socketId: string, state: ClientState): void {
   io.emit("server:clientState", { socketId, state });
+}
+
+function hydrateAdminAuth(socket: TypedSocket): void {
+  const sessionId = readAdminSessionId(socket.handshake.headers.cookie);
+  if (!sessionId || !isAdminSessionValid(sessionId)) {
+    socket.data.isAdmin = false;
+    socket.data.adminSessionId = undefined;
+    return;
+  }
+
+  socket.data.isAdmin = true;
+  socket.data.adminSessionId = sessionId;
+  touchAdminSession(sessionId);
+}
+
+function ensureAdminAuth<T>(
+  socket: TypedSocket,
+  ack: ((response: Ack<T>) => void) | undefined,
+  actionName: string
+): boolean {
+  const sessionId = socket.data.adminSessionId;
+  if (!sessionId || !isAdminSessionValid(sessionId)) {
+    socket.data.isAdmin = false;
+    socket.data.adminSessionId = undefined;
+    ackError(ack, "UNAUTHORIZED", `${actionName} 需要 admin token 登入`);
+    return false;
+  }
+
+  socket.data.isAdmin = true;
+  touchAdminSession(sessionId);
+  return true;
 }
 
 function sanitizeName(input: string): string {
@@ -90,6 +123,8 @@ function unlockLockedClientsForPractice(io: TypedIo): void {
  */
 export function registerSocketHandlers(io: TypedIo): void {
   io.on("connection", (socket) => {
+    hydrateAdminAuth(socket);
+
     socket.on("client:join", (name, ack) => {
       const safeName = sanitizeName(typeof name === "string" ? name : "");
       const state = createInitialClientState(safeName);
@@ -270,6 +305,10 @@ export function registerSocketHandlers(io: TypedIo): void {
     });
 
     socket.on("admin:setMode", (nextMode, ack) => {
+      if (!ensureAdminAuth(socket, ack, "admin:setMode")) {
+        return;
+      }
+
       if (nextMode !== "practice" && nextMode !== "official") {
         ackError(ack, "INVALID_MODE", "mode 必須為 practice 或 official");
         return;
@@ -287,6 +326,10 @@ export function registerSocketHandlers(io: TypedIo): void {
     });
 
     socket.on("admin:resetOne", (targetSocketId, ack) => {
+      if (!ensureAdminAuth(socket, ack, "admin:resetOne")) {
+        return;
+      }
+
       if (getMode() !== "official") {
         ackError(ack, "MODE_MISMATCH", "admin:resetOne 僅 official 模式可用");
         return;
@@ -309,6 +352,10 @@ export function registerSocketHandlers(io: TypedIo): void {
     });
 
     socket.on("admin:resetAll", (ack) => {
+      if (!ensureAdminAuth(socket, ack, "admin:resetAll")) {
+        return;
+      }
+
       if (getMode() !== "official") {
         ackError(ack, "MODE_MISMATCH", "admin:resetAll 僅 official 模式可用");
         return;
@@ -329,6 +376,10 @@ export function registerSocketHandlers(io: TypedIo): void {
     });
 
     socket.on("admin:rebindAll", (ack) => {
+      if (!ensureAdminAuth(socket, ack, "admin:rebindAll")) {
+        return;
+      }
+
       const rebindCount = clients.size;
       clients.clear();
 

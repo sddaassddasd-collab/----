@@ -1,10 +1,15 @@
-const socket = io();
+const socket = io({ autoConnect: false });
 
 const PAGE_SIZE = 30;
 const MAX_COLS = 6;
 const MAX_ROWS = 5;
 const TOTAL_REELS = 4;
 const INDEX0_SYMBOLS = ["複", "象", "公", "場"];
+
+const authPanel = document.getElementById("auth-panel");
+const authForm = document.getElementById("auth-form");
+const authTokenInput = document.getElementById("admin-token");
+const loginMsg = document.getElementById("login-msg");
 
 const dashboard = document.getElementById("dashboard");
 const authMsg = document.getElementById("auth-msg");
@@ -21,6 +26,7 @@ const confettiLayer = document.getElementById("confetti-layer");
 
 let mode = "practice";
 let currentPage = 0;
+let authenticated = false;
 
 const players = new Map();
 
@@ -30,6 +36,19 @@ function showMessage(text, isError = false) {
   }
   authMsg.textContent = text;
   authMsg.style.color = isError ? "#b91c1c" : "#0f766e";
+}
+
+function showLoginMessage(text, isError = false) {
+  if (!loginMsg) {
+    return;
+  }
+  loginMsg.textContent = text;
+  loginMsg.style.color = isError ? "#b91c1c" : "#0f766e";
+}
+
+function syncAuthView() {
+  authPanel?.classList.toggle("hidden", authenticated);
+  dashboard?.classList.toggle("hidden", !authenticated);
 }
 
 function toStateText(phase) {
@@ -143,12 +162,35 @@ function stateMessage(state) {
   return "";
 }
 
+function handleAdminAckFailure(ack, fallbackError) {
+  if (ack?.ok) {
+    return false;
+  }
+
+  if (ack?.code === "UNAUTHORIZED") {
+    applyUnauthorized(ack?.error || "授權已失效，請重新登入");
+    return true;
+  }
+
+  showMessage(ack?.error || fallbackError, true);
+  return true;
+}
+
+function requireAuthenticated() {
+  if (authenticated) {
+    return true;
+  }
+  applyUnauthorized("請先輸入 admin token 登入");
+  return false;
+}
+
 function resetOne(socketId) {
+  if (!requireAuthenticated()) {
+    return;
+  }
+
   socket.emit("admin:resetOne", socketId, (ack) => {
-    if (ack?.ok) {
-      return;
-    }
-    showMessage(ack?.error || "單人重置失敗", true);
+    handleAdminAckFailure(ack, "單人重置失敗");
   });
 }
 
@@ -197,10 +239,15 @@ function createTile(socketId, state) {
 }
 
 function renderModeButtons() {
-  modePracticeBtn.classList.toggle("active", mode === "practice");
-  modeOfficialBtn.classList.toggle("active", mode === "official");
-  roundResetBtn.disabled = mode !== "official";
-  roundResetBtn.textContent = "全部 Reset";
+  modePracticeBtn?.classList.toggle("active", mode === "practice");
+  modeOfficialBtn?.classList.toggle("active", mode === "official");
+  if (roundResetBtn) {
+    roundResetBtn.disabled = mode !== "official";
+    roundResetBtn.textContent = "全部 Reset";
+  }
+  if (rebindAllBtn) {
+    rebindAllBtn.disabled = !authenticated;
+  }
 }
 
 function renderGrid() {
@@ -208,18 +255,28 @@ function renderGrid() {
   const viewportAspect = window.innerWidth / Math.max(window.innerHeight, 1);
   const { rows, cols } = chooseGrid(Math.max(pageItems.length, 1), viewportAspect);
 
-  gridEl.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
-  gridEl.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
-  gridEl.replaceChildren();
+  if (gridEl) {
+    gridEl.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+    gridEl.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
+    gridEl.replaceChildren();
 
-  pageItems.forEach(([socketId, state]) => {
-    gridEl.appendChild(createTile(socketId, state));
-  });
+    pageItems.forEach(([socketId, state]) => {
+      gridEl.appendChild(createTile(socketId, state));
+    });
+  }
 
-  statsLine.textContent = `連線玩家 ${all.length} 人 | 模式 ${mode === "official" ? "正式" : "練習"}`;
-  pageInfo.textContent = `第 ${currentPage + 1} / ${totalPages} 頁`;
-  prevPageBtn.disabled = currentPage <= 0;
-  nextPageBtn.disabled = currentPage >= totalPages - 1;
+  if (statsLine) {
+    statsLine.textContent = `連線玩家 ${all.length} 人 | 模式 ${mode === "official" ? "正式" : "練習"}`;
+  }
+  if (pageInfo) {
+    pageInfo.textContent = `第 ${currentPage + 1} / ${totalPages} 頁`;
+  }
+  if (prevPageBtn) {
+    prevPageBtn.disabled = currentPage <= 0;
+  }
+  if (nextPageBtn) {
+    nextPageBtn.disabled = currentPage >= totalPages - 1;
+  }
   renderModeButtons();
 }
 
@@ -233,7 +290,7 @@ function burstConfetti() {
     piece.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
     piece.style.animationDuration = `${1.5 + Math.random() * 1.8}s`;
     piece.style.transform = `rotate(${Math.random() * 360}deg)`;
-    confettiLayer.appendChild(piece);
+    confettiLayer?.appendChild(piece);
 
     setTimeout(() => {
       piece.remove();
@@ -250,55 +307,157 @@ function applySnapshot(snapshot) {
   renderGrid();
 }
 
-modePracticeBtn.addEventListener("click", () => {
+function applyUnauthorized(message) {
+  authenticated = false;
+  players.clear();
+  currentPage = 0;
+  mode = "practice";
+  if (socket.connected) {
+    socket.disconnect();
+  }
+  syncAuthView();
+  showLoginMessage(message || "授權已失效，請重新登入", true);
+  showMessage("", false);
+  renderGrid();
+}
+
+async function restoreSession() {
+  try {
+    const response = await fetch("/admin/session", { credentials: "same-origin" });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) {
+      applyUnauthorized("無法確認登入狀態，請稍後再試");
+      return;
+    }
+
+    if (!payload.tokenConfigured) {
+      applyUnauthorized("伺服器尚未設定 ADMIN_TOKEN，請先設定環境變數後重啟。");
+      return;
+    }
+
+    if (!payload.authenticated) {
+      authenticated = false;
+      players.clear();
+      currentPage = 0;
+      mode = "practice";
+      syncAuthView();
+      showLoginMessage("請輸入 admin token 登入。");
+      renderGrid();
+      return;
+    }
+
+    authenticated = true;
+    syncAuthView();
+    showLoginMessage("");
+    if (!socket.connected) {
+      socket.connect();
+    }
+  } catch (_error) {
+    applyUnauthorized("無法連線到伺服器，請稍後再試");
+  }
+}
+
+async function submitAuth(event) {
+  event.preventDefault();
+
+  const token = typeof authTokenInput?.value === "string" ? authTokenInput.value.trim() : "";
+  if (!token) {
+    showLoginMessage("請輸入 admin token", true);
+    return;
+  }
+
+  showLoginMessage("登入中...");
+  try {
+    const response = await fetch("/admin/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      credentials: "same-origin",
+      body: JSON.stringify({ token })
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) {
+      showLoginMessage(payload?.error || "登入失敗，請稍後再試", true);
+      return;
+    }
+
+    authenticated = true;
+    if (authTokenInput) {
+      authTokenInput.value = "";
+    }
+    showLoginMessage("");
+    syncAuthView();
+    showMessage("已登入");
+    if (socket.connected) {
+      socket.disconnect();
+    }
+    socket.connect();
+  } catch (_error) {
+    showLoginMessage("登入失敗，請稍後再試", true);
+  }
+}
+
+modePracticeBtn?.addEventListener("click", () => {
+  if (!requireAuthenticated()) {
+    return;
+  }
+
   socket.emit("admin:setMode", "practice", (ack) => {
-    if (ack?.ok) {
-      return;
-    }
-    showMessage(ack?.error || "切換練習模式失敗", true);
+    handleAdminAckFailure(ack, "切換練習模式失敗");
   });
 });
 
-modeOfficialBtn.addEventListener("click", () => {
+modeOfficialBtn?.addEventListener("click", () => {
+  if (!requireAuthenticated()) {
+    return;
+  }
+
   socket.emit("admin:setMode", "official", (ack) => {
-    if (ack?.ok) {
-      return;
-    }
-    showMessage(ack?.error || "切換正式模式失敗", true);
+    handleAdminAckFailure(ack, "切換正式模式失敗");
   });
 });
 
-roundResetBtn.addEventListener("click", () => {
+roundResetBtn?.addEventListener("click", () => {
+  if (!requireAuthenticated()) {
+    return;
+  }
+
   socket.emit("admin:resetAll", (ack) => {
-    if (!ack?.ok) {
-      showMessage(ack?.error || "全部重置失敗", true);
+    if (handleAdminAckFailure(ack, "全部重置失敗")) {
       return;
     }
     showMessage(`已重置 ${ack.data.resetCount} 位玩家`);
   });
 });
 
-rebindAllBtn.addEventListener("click", () => {
+rebindAllBtn?.addEventListener("click", () => {
+  if (!requireAuthenticated()) {
+    return;
+  }
+
   socket.emit("admin:rebindAll", (ack) => {
-    if (!ack?.ok) {
-      showMessage(ack?.error || "全部重綁失敗", true);
+    if (handleAdminAckFailure(ack, "全部重綁失敗")) {
       return;
     }
     showMessage(`已要求 ${ack.data.rebindCount} 位玩家重新綁定姓名`);
   });
 });
 
-prevPageBtn.addEventListener("click", () => {
+prevPageBtn?.addEventListener("click", () => {
   currentPage = Math.max(0, currentPage - 1);
   renderGrid();
 });
 
-nextPageBtn.addEventListener("click", () => {
+nextPageBtn?.addEventListener("click", () => {
   currentPage += 1;
   renderGrid();
 });
 
 window.addEventListener("resize", renderGrid);
+
+authForm?.addEventListener("submit", submitAuth);
 
 socket.on("connect", () => {
   showMessage("已連線");
@@ -312,7 +471,9 @@ socket.on("connect", () => {
 });
 
 socket.on("disconnect", () => {
-  showMessage("連線中斷，等待重連...", true);
+  if (authenticated) {
+    showMessage("連線中斷，等待重連...", true);
+  }
 });
 
 socket.on("server:state", (payload) => {
@@ -340,5 +501,6 @@ socket.on("server:error", (payload) => {
   showMessage(payload.message, true);
 });
 
-dashboard.classList.remove("hidden");
+syncAuthView();
 renderGrid();
+restoreSession();

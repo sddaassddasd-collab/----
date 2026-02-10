@@ -8,7 +8,17 @@
   </head>
   <body>
     <main class="admin-shell">
-      <section id="dashboard" class="dashboard">
+      <section id="auth-panel" class="auth-panel">
+        <h1>後台登入</h1>
+        <p>請輸入 admin token 進入儀表板</p>
+        <form id="auth-form">
+          <input id="admin-token" type="password" autocomplete="current-password" placeholder="Admin Token" required />
+          <button type="submit">登入後台</button>
+        </form>
+        <p id="login-msg" class="system-msg"></p>
+      </section>
+
+      <section id="dashboard" class="dashboard hidden">
         <header class="toolbar">
           <div class="left-tools">
             <h1>玩家監控儀表板</h1>

@@ -137,4 +137,7 @@ export interface ServerToClientEvents {
 
 export interface InterServerEvents {}
 
-export interface SocketData {}
+export interface SocketData {
+  isAdmin?: boolean;
+  adminSessionId?: string;
+}
