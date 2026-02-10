@@ -11,7 +11,7 @@ describe("gameEngine", () => {
 
   it("resolves symbols from stop indexes", () => {
     const symbols = resolveSymbols([0, 1, 2, 3]);
-    expect(symbols).toEqual(["複", "10", "21", "32"]);
+    expect(symbols).toEqual(["複", "向", "攻", "敞"]);
   });
 
   it("detects jackpot only when all reels stop at index 0", () => {
