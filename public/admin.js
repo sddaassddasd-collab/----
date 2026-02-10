@@ -169,11 +169,16 @@ function pagedPlayers() {
 }
 
 function stateSymbols(state) {
-  const symbols = state.finalReels || state.reels;
-  if (!Array.isArray(symbols)) {
-    return "- - - -";
+  const symbols = Array.isArray(state.finalReels) ? state.finalReels : state.reels;
+  const safeSymbols = Array.isArray(symbols) ? symbols : [];
+  const normalized = [];
+
+  for (let index = 0; index < TOTAL_REELS; index += 1) {
+    const symbol = safeSymbols[index];
+    normalized.push(typeof symbol === "string" && symbol ? symbol : "-");
   }
-  return symbols.join(" ");
+
+  return normalized;
 }
 
 function stateMessage(state) {
@@ -266,7 +271,16 @@ function createTile(socketId, state, rank) {
 
   const symbolEl = document.createElement("div");
   symbolEl.className = "tile-symbols";
-  symbolEl.textContent = stateSymbols(state);
+  const symbols = stateSymbols(state);
+  for (let index = 0; index < TOTAL_REELS; index += 1) {
+    const symbolItemEl = document.createElement("span");
+    symbolItemEl.className = "tile-symbol-chip";
+    symbolItemEl.textContent = symbols[index];
+    if (symbols[index] === INDEX0_SYMBOLS[index]) {
+      symbolItemEl.classList.add("hit");
+    }
+    symbolEl.appendChild(symbolItemEl);
+  }
 
   const accuracyEl = document.createElement("div");
   accuracyEl.className = "tile-accuracy";
