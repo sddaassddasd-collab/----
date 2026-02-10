@@ -91,6 +91,15 @@ export interface SnapshotData {
   snapshot: ServerSnapshot;
 }
 
+export interface RebindAllData {
+  rebindCount: number;
+}
+
+export interface ForceRebindPayload {
+  message: string;
+  triggeredAt: number;
+}
+
 export interface AckOk<T> {
   ok: true;
   data: T;
@@ -112,6 +121,7 @@ export interface ClientToServerEvents {
   "admin:setMode": (mode: GameMode, ack?: (response: Ack<ModePayload>) => void) => void;
   "admin:resetOne": (socketId: string, ack?: (response: Ack<ResetData>) => void) => void;
   "admin:resetAll": (ack?: (response: Ack<ResetAllData>) => void) => void;
+  "admin:rebindAll": (ack?: (response: Ack<RebindAllData>) => void) => void;
   "state:get": (ack?: (response: Ack<SnapshotData>) => void) => void;
 }
 
@@ -121,6 +131,7 @@ export interface ServerToClientEvents {
   "server:clientState": (payload: ClientStatePayload) => void;
   "server:pullResult": (payload: PullResultPayload) => void;
   "server:confetti": (payload: ConfettiPayload) => void;
+  "server:forceRebind": (payload: ForceRebindPayload) => void;
   "server:error": (payload: ErrorPayload) => void;
 }
 

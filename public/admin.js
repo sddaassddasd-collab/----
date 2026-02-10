@@ -13,6 +13,7 @@ const gridEl = document.getElementById("grid");
 const modePracticeBtn = document.getElementById("mode-practice");
 const modeOfficialBtn = document.getElementById("mode-official");
 const roundResetBtn = document.getElementById("round-reset");
+const rebindAllBtn = document.getElementById("rebind-all");
 const prevPageBtn = document.getElementById("prev-page");
 const nextPageBtn = document.getElementById("next-page");
 const pageInfo = document.getElementById("page-info");
@@ -274,6 +275,16 @@ roundResetBtn.addEventListener("click", () => {
       return;
     }
     showMessage(`已重置 ${ack.data.resetCount} 位玩家`);
+  });
+});
+
+rebindAllBtn.addEventListener("click", () => {
+  socket.emit("admin:rebindAll", (ack) => {
+    if (!ack?.ok) {
+      showMessage(ack?.error || "全部重綁失敗", true);
+      return;
+    }
+    showMessage(`已要求 ${ack.data.rebindCount} 位玩家重新綁定姓名`);
   });
 });
 

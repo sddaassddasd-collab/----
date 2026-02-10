@@ -333,6 +333,22 @@ function submitJoin(event) {
   joinWithName(nameInput.value || "");
 }
 
+function forceRebind(message) {
+  joined = false;
+  joining = false;
+  pendingPull = false;
+  waitingStopAck = false;
+  nextStopReel = 1;
+  ownState = null;
+  playerName = "";
+  nameInput.value = "";
+  localStorage.removeItem("slot_player_name");
+  stopAllAnimations();
+  resetReelSymbols();
+  setMessage(message || "後台已重設，請重新輸入姓名", "error");
+  syncView();
+}
+
 function emitSpin() {
   if (!joined || pendingPull || waitingStopAck || getPhase() !== "ready") {
     return;
@@ -486,6 +502,10 @@ socket.on("server:error", (payload) => {
   pendingPull = false;
   waitingStopAck = false;
   syncButtons();
+});
+
+socket.on("server:forceRebind", (payload) => {
+  forceRebind(payload?.message);
 });
 
 initializeReels();

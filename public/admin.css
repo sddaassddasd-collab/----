@@ -132,6 +132,13 @@ body {
   font-weight: 800;
 }
 
+.rebind-btn {
+  color: #fff;
+  background: #b91c1c;
+  cursor: pointer;
+  font-weight: 800;
+}
+
 .reset-btn:disabled,
 .pager-row button:disabled {
   opacity: 0.45;

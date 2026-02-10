@@ -85,6 +85,7 @@ function unlockLockedClientsForPractice(io: TypedIo): void {
  * - `client:reset`：僅 practice 生效。
  * - `admin:setMode`：切換全域 mode 並廣播。
  * - `admin:resetOne` / `admin:resetAll`：僅 official 生效，解鎖與重置玩家。
+ * - `admin:rebindAll`：清空所有玩家狀態並要求前台重新輸入姓名。
  * - 任一中獎都會廣播 `server:confetti`，不做去重（同輪多次中獎都會觸發）。
  */
 export function registerSocketHandlers(io: TypedIo): void {
@@ -325,6 +326,18 @@ export function registerSocketHandlers(io: TypedIo): void {
 
       emitSnapshot(io);
       ackOk(ack, { resetCount });
+    });
+
+    socket.on("admin:rebindAll", (ack) => {
+      const rebindCount = clients.size;
+      clients.clear();
+
+      io.emit("server:forceRebind", {
+        message: "後台已重設，請重新輸入姓名",
+        triggeredAt: Date.now()
+      });
+      emitSnapshot(io);
+      ackOk(ack, { rebindCount });
     });
 
     socket.on("state:get", (ack) => {
