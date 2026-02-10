@@ -253,6 +253,18 @@ body {
   font-weight: 800;
 }
 
+.result-meta {
+  display: grid;
+  gap: 4px;
+}
+
+.result-meta-line {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
 .error-text {
   margin: 0;
   color: var(--danger);
@@ -579,11 +591,33 @@ body {
   font-size: 1rem;
 }
 
+.admin-client-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-client-rank {
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 0.72rem;
+  font-weight: 900;
+  color: #fff;
+  background: #0f766e;
+}
+
 .admin-client-id {
   margin: 2px 0 0;
   color: #64748b;
   font-size: 0.72rem;
   font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+.admin-client-time {
+  margin: 2px 0 0;
+  color: #334155;
+  font-size: 0.74rem;
+  font-weight: 700;
 }
 
 .admin-phase-badge {

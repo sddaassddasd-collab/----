@@ -22,6 +22,8 @@ interface SlotMachineProps {
   pendingPull: boolean;
   waitingStop: boolean;
   resultText: string;
+  finishedAtText: string;
+  rankText: string;
   onPull: () => void;
   onStopReel: (payload: { reelId: ReelId; stopIndex: StopIndex }) => void;
   onReset: () => void;
@@ -51,6 +53,8 @@ export default function SlotMachine({
   pendingPull,
   waitingStop,
   resultText,
+  finishedAtText,
+  rankText,
   onPull,
   onStopReel,
   onReset
@@ -190,6 +194,10 @@ export default function SlotMachine({
       </div>
 
       <p className="result-line">{resultText}</p>
+      <div className="result-meta">
+        <p className="result-meta-line">{finishedAtText}</p>
+        <p className="result-meta-line">{rankText}</p>
+      </div>
     </section>
   );
 }

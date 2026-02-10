@@ -22,6 +22,8 @@ const spinBtn = document.getElementById("spin-btn");
 const stopNextBtn = document.getElementById("stop-next-btn");
 const resetBtn = document.getElementById("reset-btn");
 const resultMsg = document.getElementById("result-msg");
+const finishedAtText = document.getElementById("finished-at-text");
+const rankText = document.getElementById("rank-text");
 
 let joined = false;
 let joining = false;
@@ -34,6 +36,9 @@ let ownState = null;
 let nextStopReel = 1;
 let reelItemHeight = ITEM_HEIGHT_FALLBACK;
 let pendingReelLayoutSync = false;
+let latestSnapshotClients = {};
+let currentRank = null;
+let totalRankedPlayers = 0;
 
 const reelRuntime = {
   1: { timer: null, position: 5, trackEl: document.getElementById("reel-track-1") },
@@ -58,6 +63,125 @@ function setMessage(text, type = "normal") {
 function setConnection(connected) {
   connBadge.textContent = connected ? "連線中" : "離線";
   connBadge.classList.toggle("offline", !connected);
+}
+
+function progressFromState(state) {
+  const reels = Array.isArray(state?.reels) ? state.reels : EMPTY_REELS;
+  let correctCount = 0;
+  let completedCount = 0;
+
+  for (let index = 0; index < REELS.length; index += 1) {
+    const symbol = reels[index];
+    if (symbol && symbol !== "-") {
+      completedCount += 1;
+    }
+    if (symbol === REELS[index].symbols[0]) {
+      correctCount += 1;
+    }
+  }
+
+  return {
+    accuracy: Math.round((correctCount / REELS.length) * 100),
+    completedCount
+  };
+}
+
+function normalizeFinishedAt(state) {
+  return typeof state?.finishedAt === "number" ? state.finishedAt : null;
+}
+
+function compareFinishedAtAsc(stateA, stateB) {
+  const finishedAtA = normalizeFinishedAt(stateA);
+  const finishedAtB = normalizeFinishedAt(stateB);
+
+  if (finishedAtA === null && finishedAtB === null) {
+    return 0;
+  }
+  if (finishedAtA === null) {
+    return 1;
+  }
+  if (finishedAtB === null) {
+    return -1;
+  }
+  return finishedAtA - finishedAtB;
+}
+
+function sortClientEntriesByAdminRules(clientsRecord) {
+  return Object.entries(clientsRecord || {}).sort((a, b) => {
+    const progressA = progressFromState(a[1]);
+    const progressB = progressFromState(b[1]);
+
+    if (progressA.accuracy !== progressB.accuracy) {
+      return progressB.accuracy - progressA.accuracy;
+    }
+
+    if (progressA.completedCount !== progressB.completedCount) {
+      return progressB.completedCount - progressA.completedCount;
+    }
+
+    const finishedAtDiff = compareFinishedAtAsc(a[1], b[1]);
+    if (finishedAtDiff !== 0) {
+      return finishedAtDiff;
+    }
+
+    const nameDiff = a[1].name.localeCompare(b[1].name, "zh-Hant");
+    if (nameDiff !== 0) {
+      return nameDiff;
+    }
+    return a[0].localeCompare(b[0]);
+  });
+}
+
+function recomputeOwnRanking() {
+  const sortedEntries = sortClientEntriesByAdminRules(latestSnapshotClients);
+  totalRankedPlayers = sortedEntries.length;
+  currentRank = null;
+
+  const selfSocketId = socket.id;
+  if (!selfSocketId) {
+    return;
+  }
+
+  const rankIndex = sortedEntries.findIndex(([socketId]) => socketId === selfSocketId);
+  if (rankIndex >= 0) {
+    currentRank = rankIndex + 1;
+  }
+}
+
+function formatFinishedAt(value) {
+  if (typeof value !== "number") {
+    return "尚未完成";
+  }
+
+  const date = new Date(value);
+  const milliseconds = String(date.getMilliseconds()).padStart(3, "0");
+  return `${date.toLocaleString("zh-TW", { hour12: false })}.${milliseconds}`;
+}
+
+function syncRoundMeta() {
+  if (!finishedAtText || !rankText) {
+    return;
+  }
+
+  if (!joined || !ownState) {
+    finishedAtText.textContent = "";
+    rankText.textContent = "";
+    return;
+  }
+
+  finishedAtText.textContent = `完成時間：${formatFinishedAt(ownState.finishedAt)}`;
+
+  if (typeof ownState.finishedAt !== "number") {
+    rankText.textContent = "目前排名：尚未完成本輪";
+    return;
+  }
+
+  if (currentRank === null) {
+    rankText.textContent = `目前排名：- / 共 ${totalRankedPlayers} 人`;
+    return;
+  }
+
+  rankText.textContent = `目前排名：第 ${currentRank} 名 / 共 ${totalRankedPlayers} 人`;
 }
 
 function getPhase() {
@@ -281,6 +405,7 @@ function syncView() {
     nameScreen.classList.remove("hidden");
     gameScreen.classList.add("hidden");
     syncButtons();
+    syncRoundMeta();
     return;
   }
 
@@ -288,10 +413,15 @@ function syncView() {
   gameScreen.classList.remove("hidden");
   welcomeText.textContent = `玩家：${ownState?.name || playerName}`;
   syncButtons();
+  syncRoundMeta();
 }
 
 function applyClientState(state) {
   ownState = state;
+  if (socket.id) {
+    latestSnapshotClients[socket.id] = state;
+    recomputeOwnRanking();
+  }
 
   if (state.phase === "spinning") {
     if (!hasRunningReel()) {
@@ -327,7 +457,10 @@ function applySnapshot(snapshot) {
   }
 
   mode = snapshot.mode;
-  const mine = snapshot.clients?.[socket.id];
+  latestSnapshotClients = snapshot.clients && typeof snapshot.clients === "object" ? snapshot.clients : {};
+  recomputeOwnRanking();
+
+  const mine = latestSnapshotClients?.[socket.id];
   if (joined && mine) {
     applyClientState(mine);
     return;
@@ -391,6 +524,9 @@ function forceRebind(message) {
   waitingStopAck = false;
   nextStopReel = 1;
   ownState = null;
+  latestSnapshotClients = {};
+  currentRank = null;
+  totalRankedPlayers = 0;
   playerName = "";
   reconnectToken = "";
   nameInput.value = "";
@@ -417,7 +553,8 @@ function emitSpin() {
     phase: "spinning",
     reels: [...EMPTY_REELS],
     finalReels: null,
-    isWin: false
+    isWin: false,
+    finishedAt: null
   };
 
   startSpinAnimation();
@@ -518,6 +655,9 @@ socket.on("disconnect", () => {
   waitingStopAck = false;
   nextStopReel = 1;
   ownState = null;
+  latestSnapshotClients = {};
+  currentRank = null;
+  totalRankedPlayers = 0;
   stopAllAnimations();
   syncView();
 });

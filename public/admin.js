@@ -162,7 +162,8 @@ function pagedPlayers() {
   return {
     all,
     totalPages,
-    pageItems
+    pageItems,
+    start
   };
 }
 
@@ -185,6 +186,16 @@ function stateMessage(state) {
     return "中獎";
   }
   return "";
+}
+
+function formatFinishedAt(value) {
+  if (typeof value !== "number") {
+    return "尚未完成";
+  }
+
+  const date = new Date(value);
+  const milliseconds = String(date.getMilliseconds()).padStart(3, "0");
+  return `${date.toLocaleString("zh-TW", { hour12: false })}.${milliseconds}`;
 }
 
 function handleAdminAckFailure(ack, fallbackError) {
@@ -219,7 +230,7 @@ function resetOne(socketId) {
   });
 }
 
-function createTile(socketId, state) {
+function createTile(socketId, state, rank) {
   const progress = progressFromState(state);
   const tile = document.createElement("article");
   tile.className = "tile";
@@ -227,13 +238,26 @@ function createTile(socketId, state) {
     tile.classList.add("winner");
   }
 
+  const nameRow = document.createElement("div");
+  nameRow.className = "tile-name-row";
+
+  const rankEl = document.createElement("span");
+  rankEl.className = "tile-rank";
+  rankEl.textContent = `#${rank}`;
+
   const nameEl = document.createElement("div");
   nameEl.className = "tile-name";
   nameEl.textContent = state.name;
 
+  nameRow.append(rankEl, nameEl);
+
   const idEl = document.createElement("div");
   idEl.className = "tile-id";
   idEl.textContent = `ID ${socketId.slice(0, 8)}`;
+
+  const finishedAtEl = document.createElement("div");
+  finishedAtEl.className = "tile-finished-at";
+  finishedAtEl.textContent = `完成時間 ${formatFinishedAt(state.finishedAt)}`;
 
   const phaseEl = document.createElement("div");
   phaseEl.className = "tile-state";
@@ -259,7 +283,7 @@ function createTile(socketId, state) {
     resetOne(socketId);
   });
 
-  tile.append(nameEl, idEl, phaseEl, symbolEl, accuracyEl, msgEl, resetBtn);
+  tile.append(nameRow, idEl, finishedAtEl, phaseEl, symbolEl, accuracyEl, msgEl, resetBtn);
   return tile;
 }
 
@@ -276,7 +300,7 @@ function renderModeButtons() {
 }
 
 function renderGrid() {
-  const { all, totalPages, pageItems } = pagedPlayers();
+  const { all, totalPages, pageItems, start } = pagedPlayers();
   const viewportAspect = window.innerWidth / Math.max(window.innerHeight, 1);
   const { rows, cols } = chooseGrid(Math.max(pageItems.length, 1), viewportAspect);
 
@@ -285,8 +309,8 @@ function renderGrid() {
     gridEl.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
     gridEl.replaceChildren();
 
-    pageItems.forEach(([socketId, state]) => {
-      gridEl.appendChild(createTile(socketId, state));
+    pageItems.forEach(([socketId, state], index) => {
+      gridEl.appendChild(createTile(socketId, state, start + index + 1));
     });
   }
 

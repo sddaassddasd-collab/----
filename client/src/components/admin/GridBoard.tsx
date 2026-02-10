@@ -5,6 +5,7 @@ import ClientTile from "./ClientTile";
 export interface ClientEntry {
   socketId: string;
   state: ClientState;
+  rank: number;
 }
 
 interface GridBoardProps {
@@ -71,7 +72,14 @@ export default function GridBoard({ clients, mode, onResetOne }: GridBoardProps)
         <div className="admin-empty-tile">目前無連線使用者</div>
       ) : (
         clients.map((client) => (
-          <ClientTile key={client.socketId} socketId={client.socketId} state={client.state} mode={mode} onResetOne={onResetOne} />
+          <ClientTile
+            key={client.socketId}
+            socketId={client.socketId}
+            state={client.state}
+            rank={client.rank}
+            mode={mode}
+            onResetOne={onResetOne}
+          />
         ))
       )}
     </section>

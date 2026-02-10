@@ -171,6 +171,21 @@ body {
   font-size: 1.03rem;
 }
 
+.tile-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tile-rank {
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 0.76rem;
+  font-weight: 900;
+  color: #fff;
+  background: #0f766e;
+}
+
 .tile-state {
   color: var(--muted);
   font-size: 0.85rem;
@@ -180,6 +195,12 @@ body {
   color: #64748b;
   font-size: 0.76rem;
   font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+.tile-finished-at {
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
 .tile-symbols {

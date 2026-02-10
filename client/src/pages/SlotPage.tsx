@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { ClientState, GameMode, ReelId, StopIndex } from "../../../shared/types";
+import { formatFinishedAt, getRankSummary } from "../app/ranking";
 import {
   ensureSocketConnected,
   getSocket,
@@ -19,6 +20,7 @@ export default function SlotPage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<GameMode>("practice");
   const [clientState, setClientState] = useState<ClientState | null>(null);
+  const [allClients, setAllClients] = useState<Record<string, ClientState>>({});
   const [resultText, setResultText] = useState("");
   const [pendingPull, setPendingPull] = useState(false);
   const [waitingStop, setWaitingStop] = useState(false);
@@ -28,6 +30,21 @@ export default function SlotPage() {
   const [modalMessage, setModalMessage] = useState("");
 
   const welcomeName = useMemo(() => clientState?.name ?? localStorage.getItem(NAME_STORAGE_KEY) ?? "玩家", [clientState]);
+  const selfSocketId = getSocket().id;
+  const rankSummary = useMemo(() => getRankSummary(allClients, selfSocketId), [allClients, selfSocketId]);
+  const finishedAtText = useMemo(
+    () => `完成時間：${formatFinishedAt(clientState?.finishedAt ?? null)}`,
+    [clientState?.finishedAt]
+  );
+  const rankText = useMemo(() => {
+    if (typeof clientState?.finishedAt !== "number") {
+      return "目前排名：尚未完成本輪";
+    }
+    if (rankSummary.rank === null) {
+      return `目前排名：- / 共 ${rankSummary.total} 人`;
+    }
+    return `目前排名：第 ${rankSummary.rank} 名 / 共 ${rankSummary.total} 人`;
+  }, [clientState?.finishedAt, rankSummary.rank, rankSummary.total]);
 
   useEffect(() => {
     const socket = getSocket();
@@ -54,7 +71,16 @@ export default function SlotPage() {
     };
 
     const handleClientState = (payload: { socketId: string; state: ClientState }) => {
-      if (!mounted || !isSelf(payload.socketId)) {
+      if (!mounted) {
+        return;
+      }
+
+      setAllClients((prev) => ({
+        ...prev,
+        [payload.socketId]: payload.state
+      }));
+
+      if (!isSelf(payload.socketId)) {
         return;
       }
 
@@ -67,6 +93,7 @@ export default function SlotPage() {
       }
 
       setMode(payload.snapshot.mode);
+      setAllClients(payload.snapshot.clients);
       const currentId = socket.id;
       if (!currentId) {
         return;
@@ -145,6 +172,13 @@ export default function SlotPage() {
 
         setMode(joinAck.data.mode);
         setClientState(joinAck.data.state);
+        const currentId = socket.id;
+        if (currentId) {
+          setAllClients((prev) => ({
+            ...prev,
+            [currentId]: joinAck.data.state
+          }));
+        }
         localStorage.setItem(RECONNECT_TOKEN_STORAGE_KEY, joinAck.data.reconnectToken);
       } catch {
         if (!mounted) {
@@ -186,6 +220,13 @@ export default function SlotPage() {
     }
 
     setClientState(ack.data.state);
+    const currentId = getSocket().id;
+    if (currentId) {
+      setAllClients((prev) => ({
+        ...prev,
+        [currentId]: ack.data.state
+      }));
+    }
   }
 
   async function handleStopReel(payload: { reelId: ReelId; stopIndex: StopIndex }) {
@@ -205,6 +246,13 @@ export default function SlotPage() {
     }
 
     setClientState(ack.data.state);
+    const currentId = getSocket().id;
+    if (currentId) {
+      setAllClients((prev) => ({
+        ...prev,
+        [currentId]: ack.data.state
+      }));
+    }
 
     if (ack.data.result) {
       setResultText(ack.data.result.locked ? `${ack.data.result.resultText}（等待後台 reset）` : ack.data.result.resultText);
@@ -231,6 +279,13 @@ export default function SlotPage() {
     }
 
     setClientState(ack.data.state);
+    const currentId = getSocket().id;
+    if (currentId) {
+      setAllClients((prev) => ({
+        ...prev,
+        [currentId]: ack.data.state
+      }));
+    }
     setResultText("已重置，可再次 Pull");
   }
 
@@ -254,6 +309,8 @@ export default function SlotPage() {
         pendingPull={pendingPull}
         waitingStop={waitingStop}
         resultText={resultText}
+        finishedAtText={finishedAtText}
+        rankText={rankText}
         onPull={handlePull}
         onStopReel={handleStopReel}
         onReset={handleReset}

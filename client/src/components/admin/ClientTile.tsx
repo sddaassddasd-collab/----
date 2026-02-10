@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ClientState, GameMode, ReelId } from "../../../../shared/types";
+import { formatFinishedAt } from "../../app/ranking";
 
 interface ClientTileProps {
   socketId: string;
   state: ClientState;
+  rank: number;
   mode: GameMode;
   onResetOne: (socketId: string) => void;
 }
@@ -48,7 +50,7 @@ function phaseMessage(state: ClientState): string {
   return "";
 }
 
-export default function ClientTile({ socketId, state, mode, onResetOne }: ClientTileProps) {
+export default function ClientTile({ socketId, state, rank, mode, onResetOne }: ClientTileProps) {
   const [indices, setIndices] = useState<[number, number, number, number]>([0, 0, 0, 0]);
 
   useEffect(() => {
@@ -112,8 +114,12 @@ export default function ClientTile({ socketId, state, mode, onResetOne }: Client
     <article className={`admin-client-tile ${state.isWin ? "winner" : ""}`}>
       <div className="admin-client-top">
         <div>
-          <p className="admin-client-name">{state.name}</p>
+          <div className="admin-client-name-row">
+            <span className="admin-client-rank">#{rank}</span>
+            <p className="admin-client-name">{state.name}</p>
+          </div>
           <p className="admin-client-id">ID {socketId.slice(0, 8)}</p>
+          <p className="admin-client-time">完成時間：{formatFinishedAt(state.finishedAt)}</p>
         </div>
         <span className={`admin-phase-badge ${state.phase}`}>{phaseText(state.phase)}</span>
       </div>

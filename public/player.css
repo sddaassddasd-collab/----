@@ -229,6 +229,19 @@ body {
   color: var(--danger);
 }
 
+.round-meta {
+  margin: 2px 2px 0;
+  display: grid;
+  gap: 4px;
+}
+
+.round-meta-line {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
 @media (max-width: 699px) and (orientation: portrait) {
   :root {
     --reel-item-h: 42px;
