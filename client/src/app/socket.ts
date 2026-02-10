@@ -4,7 +4,9 @@ import type {
   ClientState,
   ClientToServerEvents,
   GameMode,
+  ModePayload,
   PullData,
+  ResetAllData,
   ResetData,
   ServerSnapshot,
   ServerToClientEvents,
@@ -89,6 +91,21 @@ export function resetClient(): Promise<Ack<ResetData>> {
   return emitWithAck((ack) => socket.emit("client:reset", ack));
 }
 
+export function setAdminMode(mode: GameMode): Promise<Ack<ModePayload>> {
+  const socket = getSocket();
+  return emitWithAck((ack) => socket.emit("admin:setMode", mode, ack));
+}
+
+export function resetOneClient(socketId: string): Promise<Ack<ResetData>> {
+  const socket = getSocket();
+  return emitWithAck((ack) => socket.emit("admin:resetOne", socketId, ack));
+}
+
+export function resetAllClients(): Promise<Ack<ResetAllData>> {
+  const socket = getSocket();
+  return emitWithAck((ack) => socket.emit("admin:resetAll", ack));
+}
+
 export function fetchSnapshot(): Promise<Ack<SnapshotData>> {
   const socket = getSocket();
   return emitWithAck((ack) => socket.emit("state:get", ack));
@@ -97,4 +114,3 @@ export function fetchSnapshot(): Promise<Ack<SnapshotData>> {
 export function getSelfState(snapshot: ServerSnapshot, socketId: string): ClientState | null {
   return snapshot.clients[socketId] ?? null;
 }
-
