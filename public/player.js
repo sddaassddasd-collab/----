@@ -8,7 +8,7 @@ const REELS = [
 ];
 
 const EMPTY_REELS = ["-", "-", "-", "-"];
-const ITEM_HEIGHT = 48;
+const ITEM_HEIGHT_FALLBACK = 48;
 const RECONNECT_TOKEN_STORAGE_KEY = "slot_reconnect_token";
 
 const nameScreen = document.getElementById("name-screen");
@@ -32,6 +32,8 @@ let playerName = localStorage.getItem("slot_player_name") || "";
 let reconnectToken = localStorage.getItem(RECONNECT_TOKEN_STORAGE_KEY) || "";
 let ownState = null;
 let nextStopReel = 1;
+let reelItemHeight = ITEM_HEIGHT_FALLBACK;
+let pendingReelLayoutSync = false;
 
 const reelRuntime = {
   1: { timer: null, position: 5, trackEl: document.getElementById("reel-track-1") },
@@ -62,6 +64,43 @@ function getPhase() {
   return ownState?.phase || "ready";
 }
 
+function readReelItemHeight() {
+  const rootStyle = getComputedStyle(document.documentElement);
+  const rawValue = rootStyle.getPropertyValue("--reel-item-h").trim();
+  const parsedValue = Number.parseFloat(rawValue);
+  if (Number.isFinite(parsedValue) && parsedValue > 0) {
+    return parsedValue;
+  }
+
+  const sampleReelItem = document.querySelector(".reel-item");
+  if (sampleReelItem instanceof HTMLElement) {
+    const height = sampleReelItem.getBoundingClientRect().height;
+    if (height > 0) {
+      return height;
+    }
+  }
+
+  return ITEM_HEIGHT_FALLBACK;
+}
+
+function syncReelLayout() {
+  reelItemHeight = readReelItemHeight();
+  for (const reel of REELS) {
+    applyReelTransform(reel.reelId, false);
+  }
+}
+
+function scheduleReelLayoutSync() {
+  if (pendingReelLayoutSync) {
+    return;
+  }
+  pendingReelLayoutSync = true;
+  window.requestAnimationFrame(() => {
+    pendingReelLayoutSync = false;
+    syncReelLayout();
+  });
+}
+
 function applyReelTransform(reelId, withTransition = false) {
   const runtime = reelRuntime[reelId];
   if (!runtime.trackEl) {
@@ -72,7 +111,7 @@ function applyReelTransform(reelId, withTransition = false) {
     ? "transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)"
     : "none";
 
-  const offset = -((runtime.position - 1) * ITEM_HEIGHT);
+  const offset = -((runtime.position - 1) * reelItemHeight);
   runtime.trackEl.style.transform = `translateY(${offset}px)`;
 }
 
@@ -135,6 +174,7 @@ function initializeReels() {
     buildReelTrack(reel);
     setReelToSymbol(reel.reelId, reel.symbols[0], false);
   }
+  syncReelLayout();
 }
 
 function resetReelSymbols() {
@@ -457,6 +497,8 @@ nameForm.addEventListener("submit", submitJoin);
 spinBtn.addEventListener("click", emitSpin);
 stopNextBtn.addEventListener("click", emitStopNext);
 resetBtn.addEventListener("click", emitReset);
+window.addEventListener("resize", scheduleReelLayoutSync);
+window.addEventListener("orientationchange", scheduleReelLayoutSync);
 
 socket.on("connect", () => {
   setConnection(true);
@@ -524,3 +566,4 @@ socket.on("server:forceRebind", (payload) => {
 initializeReels();
 setConnection(socket.connected);
 syncView();
+scheduleReelLayoutSync();
