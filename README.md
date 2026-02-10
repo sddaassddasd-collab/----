@@ -13,7 +13,8 @@ ADMIN_TOKEN=請換成你的密碼 npm run dev
 - 後台：`http://localhost:3000/admin`
 
 > `ADMIN_TOKEN` 為後台登入 token，未設定時後台無法登入。  
-> 可選：`ADMIN_SESSION_TTL_MS`（預設 12 小時）設定 admin session 有效時間。
+> 可選：`ADMIN_SESSION_TTL_MS`（預設 12 小時）設定 admin session 有效時間。  
+> 可選：`ADMIN_SESSION_COOKIE_SECURE`（`auto` / `true` / `false`，預設 `auto`）。`auto` 會依請求是否為 HTTPS 決定 cookie 是否加上 `Secure`。
 
 ## React 前台（Vite）
 
