@@ -231,34 +231,71 @@ body {
 
 @media (max-width: 699px) and (orientation: portrait) {
   :root {
-    --reel-item-h: 40px;
+    --reel-item-h: 42px;
     --reel-window-h: calc(var(--reel-item-h) * 3);
+  }
+
+  .app-shell {
+    padding: 12px;
+  }
+
+  .panel {
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .status-wrap {
+    gap: 6px;
+  }
+
+  .mode-badge,
+  .conn-badge {
+    padding: 5px 10px;
+    font-size: 0.75rem;
   }
 
   .reel-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 6px;
+    gap: 8px;
+    align-items: start;
   }
 
   .reel-card {
     min-width: 0;
     padding: 8px 6px 10px;
+    border-radius: 12px;
   }
 
   .reel-title {
-    margin-bottom: 6px;
-    font-size: 0.72rem;
-    letter-spacing: 0.04em;
+    margin-bottom: 5px;
+    font-size: 0.7rem;
+    letter-spacing: 0.02em;
+  }
+
+  .reel-window {
+    border-radius: 10px;
   }
 
   .reel-item {
-    font-size: 1.35rem;
+    font-size: clamp(1.2rem, 5vw, 1.55rem);
   }
 
   .reel-center-line {
     left: 4px;
     right: 4px;
     border-width: 1px;
+    border-radius: 8px;
+  }
+
+  .action-row {
+    margin-top: 12px;
+    gap: 8px;
+  }
+
+  .primary-btn,
+  .stop-next-btn,
+  .secondary-btn {
+    padding: 11px;
   }
 }
 
