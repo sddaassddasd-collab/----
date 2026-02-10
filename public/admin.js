@@ -105,6 +105,26 @@ function progressFromState(state) {
   };
 }
 
+function normalizeFinishedAt(state) {
+  return typeof state?.finishedAt === "number" ? state.finishedAt : null;
+}
+
+function compareFinishedAtAsc(stateA, stateB) {
+  const finishedAtA = normalizeFinishedAt(stateA);
+  const finishedAtB = normalizeFinishedAt(stateB);
+
+  if (finishedAtA === null && finishedAtB === null) {
+    return 0;
+  }
+  if (finishedAtA === null) {
+    return 1;
+  }
+  if (finishedAtB === null) {
+    return -1;
+  }
+  return finishedAtA - finishedAtB;
+}
+
 function playersSorted() {
   return [...players.entries()].sort((a, b) => {
     const progressA = progressFromState(a[1]);
@@ -116,6 +136,11 @@ function playersSorted() {
 
     if (progressA.completedCount !== progressB.completedCount) {
       return progressB.completedCount - progressA.completedCount;
+    }
+
+    const finishedAtDiff = compareFinishedAtAsc(a[1], b[1]);
+    if (finishedAtDiff !== 0) {
+      return finishedAtDiff;
     }
 
     const nameDiff = a[1].name.localeCompare(b[1].name, "zh-Hant");

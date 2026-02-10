@@ -273,7 +273,8 @@ export function registerSocketHandlers(io: TypedIo): void {
         phase: "spinning",
         reels: getEmptyReels(),
         finalReels: null,
-        isWin: false
+        isWin: false,
+        finishedAt: null
       };
       if (!setClientStateForSocket(socket.id, spinning)) {
         ackError(ack, "NOT_JOINED", "請先執行 client:join(name)");
@@ -328,7 +329,8 @@ export function registerSocketHandlers(io: TypedIo): void {
           phase: "spinning",
           reels: nextReels,
           finalReels: null,
-          isWin: false
+          isWin: false,
+          finishedAt: null
         };
         if (!setClientStateForSocket(socket.id, nextState)) {
           ackError(ack, "NOT_JOINED", "請先執行 client:join(name)");
@@ -351,12 +353,14 @@ export function registerSocketHandlers(io: TypedIo): void {
       const mode = getMode();
       const settle = settleByReels(mode, nextReels);
       const locked = mode === "official";
+      const finishedAt = Date.now();
       const finalState: ClientState = {
         ...current,
         phase: locked ? "locked" : "ready",
         reels: nextReels,
         finalReels: nextReels,
-        isWin: settle.isWin
+        isWin: settle.isWin,
+        finishedAt
       };
       if (!setClientStateForSocket(socket.id, finalState)) {
         ackError(ack, "NOT_JOINED", "請先執行 client:join(name)");

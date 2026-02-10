@@ -14,6 +14,7 @@ export interface ClientState {
   reels: Reels;
   finalReels: Reels | null;
   isWin: boolean;
+  finishedAt: number | null;
 }
 
 export interface ServerSnapshot {

@@ -27,7 +27,8 @@ export function createInitialClientState(name: string): ClientState {
     phase: "ready",
     reels: getEmptyReels(),
     finalReels: null,
-    isWin: false
+    isWin: false,
+    finishedAt: null
   };
 }
 
