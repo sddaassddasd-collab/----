@@ -5,7 +5,9 @@ interface ResetControlsProps {
   totalClients: number;
   currentPage: number;
   totalPages: number;
+  starting: boolean;
   resetting: boolean;
+  onStartAll: () => void;
   onResetAll: () => void;
   onPrevPage: () => void;
   onNextPage: () => void;
@@ -16,7 +18,9 @@ export default function ResetControls({
   totalClients,
   currentPage,
   totalPages,
+  starting,
   resetting,
+  onStartAll,
   onResetAll,
   onPrevPage,
   onNextPage
@@ -31,6 +35,9 @@ export default function ResetControls({
       </div>
 
       <div className="admin-reset-actions">
+        <button type="button" className="admin-start-all-btn" disabled={mode !== "official" || starting} onClick={onStartAll}>
+          {starting ? "啟動中..." : "全體開始"}
+        </button>
         <button type="button" className="admin-reset-all-btn" disabled={mode !== "official" || resetting} onClick={onResetAll}>
           {resetting ? "重置中..." : "全部 Reset"}
         </button>

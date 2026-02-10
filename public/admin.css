@@ -132,6 +132,13 @@ body {
   font-weight: 800;
 }
 
+.start-btn {
+  color: #fff;
+  background: var(--accent);
+  cursor: pointer;
+  font-weight: 800;
+}
+
 .rebind-btn {
   color: #fff;
   background: #b91c1c;
@@ -139,6 +146,7 @@ body {
   font-weight: 800;
 }
 
+.start-btn:disabled,
 .reset-btn:disabled,
 .rebind-btn:disabled,
 .pager-row button:disabled {

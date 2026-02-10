@@ -478,6 +478,7 @@ body {
 }
 
 .admin-mode-btn,
+.admin-start-all-btn,
 .admin-reset-all-btn,
 .admin-page-btn,
 .admin-reset-one-btn {
@@ -514,8 +515,13 @@ body {
 .admin-reset-actions {
   margin-top: 10px;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
+}
+
+.admin-start-all-btn {
+  background: #0f766e;
+  color: #fff;
 }
 
 .admin-reset-all-btn {
@@ -701,6 +707,7 @@ body {
 }
 
 .admin-reset-one-btn:disabled,
+.admin-start-all-btn:disabled,
 .admin-mode-btn:disabled,
 .admin-page-btn:disabled,
 .admin-reset-all-btn:disabled {

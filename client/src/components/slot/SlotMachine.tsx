@@ -123,9 +123,10 @@ export default function SlotMachine({
     return () => window.clearInterval(timer);
   }, [phase, reels]);
 
-  const canPull = Boolean(isConnected && phase === "ready" && !pendingPull && !waitingStop);
+  const canPull = Boolean(mode === "practice" && isConnected && phase === "ready" && !pendingPull && !waitingStop);
   const canStop = Boolean(isConnected && phase === "spinning" && nextStopReel && !pendingPull && !waitingStop);
   const canReset = Boolean(isConnected && phase !== "spinning" && !pendingPull && !waitingStop && mode === "practice");
+  const pullButtonText = mode === "official" && phase === "ready" ? "等待後台開始" : pendingPull ? "啟動中..." : "Pull";
 
   const stopButtonText = (() => {
     if (phase === "spinning" && pendingPull) {
@@ -168,7 +169,7 @@ export default function SlotMachine({
 
       <div className="action-row">
         <button type="button" className="primary-btn" disabled={!canPull} onClick={onPull}>
-          Pull
+          {pullButtonText}
         </button>
 
         <button

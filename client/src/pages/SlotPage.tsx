@@ -207,6 +207,11 @@ export default function SlotPage() {
       return;
     }
 
+    if (mode === "official") {
+      setError("正式模式請等待後台開始");
+      return;
+    }
+
     setError("");
     setResultText("");
     setPendingPull(true);

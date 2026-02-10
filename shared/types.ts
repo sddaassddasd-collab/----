@@ -94,6 +94,10 @@ export interface ResetAllData {
   resetCount: number;
 }
 
+export interface StartAllData {
+  startedCount: number;
+}
+
 export interface SnapshotData {
   snapshot: ServerSnapshot;
 }
@@ -126,6 +130,7 @@ export interface ClientToServerEvents {
   "client:stopReel": (payload: StopReelPayload, ack?: (response: Ack<StopReelData>) => void) => void;
   "client:reset": (ack?: (response: Ack<ResetData>) => void) => void;
   "admin:setMode": (mode: GameMode, ack?: (response: Ack<ModePayload>) => void) => void;
+  "admin:startAll": (ack?: (response: Ack<StartAllData>) => void) => void;
   "admin:resetOne": (socketId: string, ack?: (response: Ack<ResetData>) => void) => void;
   "admin:resetAll": (ack?: (response: Ack<ResetAllData>) => void) => void;
   "admin:rebindAll": (ack?: (response: Ack<RebindAllData>) => void) => void;

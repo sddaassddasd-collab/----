@@ -377,13 +377,22 @@ function nextStopFromReels(reels) {
 function syncButtons() {
   const connected = socket.connected;
   const phase = getPhase();
+  const officialControlled = mode === "official";
   const canStop = Boolean(
     joined && connected && phase === "spinning" && nextStopReel <= 4 && !pendingPull && !waitingStopAck
   );
 
-  spinBtn.disabled = !joined || !connected || pendingPull || waitingStopAck || phase !== "ready";
+  spinBtn.disabled = !joined || !connected || pendingPull || waitingStopAck || phase !== "ready" || officialControlled;
   stopNextBtn.disabled = !canStop;
   resetBtn.disabled = !joined || !connected || pendingPull || waitingStopAck || phase === "spinning" || mode !== "practice";
+
+  if (officialControlled && phase === "ready") {
+    spinBtn.textContent = "等待後台開始";
+  } else if (pendingPull) {
+    spinBtn.textContent = "啟動中...";
+  } else {
+    spinBtn.textContent = "開始轉動";
+  }
 
   if (phase === "spinning" && pendingPull) {
     stopNextBtn.textContent = "啟動中...";
@@ -539,6 +548,12 @@ function forceRebind(message) {
 }
 
 function emitSpin() {
+  if (mode === "official") {
+    setMessage("正式模式請等待後台開始", "error");
+    syncButtons();
+    return;
+  }
+
   if (!joined || pendingPull || waitingStopAck || getPhase() !== "ready") {
     return;
   }

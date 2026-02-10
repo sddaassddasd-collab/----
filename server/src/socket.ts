@@ -223,10 +223,11 @@ function unlockLockedClientsForPractice(io: TypedIo): void {
  * Socket 事件流（對應需求）
  *
  * - `client:join(name)`：註冊/覆蓋目前 socket 的玩家資料。
- * - `client:pull`：開始一輪轉動（phase -> spinning）。
+ * - `client:pull`：僅 practice 可用；official 需由 `admin:startAll` 統一開始。
  * - `client:stopReel`：每停一欄就上報後端；第 4 欄停下時才結算結果。
  * - `client:reset`：僅 practice 生效。
  * - `admin:setMode`：切換全域 mode 並廣播。
+ * - `admin:startAll`：official 模式下一鍵啟動所有 ready 玩家轉動。
  * - `admin:resetOne` / `admin:resetAll`：僅 official 生效，解鎖與重置玩家。
  * - `admin:rebindAll`：清空所有玩家狀態並要求前台重新輸入姓名。
  * - 任一中獎都會廣播 `server:confetti`，不做去重（同輪多次中獎都會觸發）。
@@ -258,8 +259,13 @@ export function registerSocketHandlers(io: TypedIo): void {
       }
 
       const mode = getMode();
-      if (mode === "official" && current.phase === "locked") {
-        ackError(ack, "LOCKED", "official 模式下請等待 admin reset");
+      if (mode === "official") {
+        ackError(ack, "PULL_CONTROLLED_BY_ADMIN", "official 模式下只能由後台開始轉動");
+        return;
+      }
+
+      if (current.phase === "locked") {
+        ackError(ack, "LOCKED", "目前為鎖定狀態，請先重置");
         return;
       }
 
@@ -447,6 +453,42 @@ export function registerSocketHandlers(io: TypedIo): void {
       io.emit("server:mode", { mode });
       emitSnapshot(io);
       ackOk(ack, { mode });
+    });
+
+    socket.on("admin:startAll", (ack) => {
+      if (!ensureAdminAuth(socket, ack, "admin:startAll")) {
+        return;
+      }
+
+      if (getMode() !== "official") {
+        ackError(ack, "MODE_MISMATCH", "admin:startAll 僅 official 模式可用");
+        return;
+      }
+
+      let startedCount = 0;
+      for (const [socketId, state] of clients.entries()) {
+        if (state.phase !== "ready") {
+          continue;
+        }
+
+        const spinning: ClientState = {
+          ...state,
+          phase: "spinning",
+          reels: getEmptyReels(),
+          finalReels: null,
+          isWin: false,
+          finishedAt: null
+        };
+        if (!setClientStateForSocket(socketId, spinning)) {
+          continue;
+        }
+
+        startedCount += 1;
+        emitClientState(io, socketId, spinning);
+      }
+
+      emitSnapshot(io);
+      ackOk(ack, { startedCount });
     });
 
     socket.on("admin:resetOne", (targetSocketId, ack) => {

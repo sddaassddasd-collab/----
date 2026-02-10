@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ClientState, GameMode } from "../../../shared/types";
 import { sortClientEntries } from "../app/ranking";
-import { ensureSocketConnected, fetchSnapshot, getSocket, resetAllClients, resetOneClient, setAdminMode } from "../app/socket";
+import {
+  ensureSocketConnected,
+  fetchSnapshot,
+  getSocket,
+  resetAllClients,
+  resetOneClient,
+  setAdminMode,
+  startAllClients
+} from "../app/socket";
 import ConfettiLayer from "../components/admin/ConfettiLayer";
 import GridBoard, { type ClientEntry } from "../components/admin/GridBoard";
 import ModeToggle from "../components/admin/ModeToggle";
@@ -26,6 +34,7 @@ export default function AdminPage() {
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [changingMode, setChangingMode] = useState(false);
+  const [startingAll, setStartingAll] = useState(false);
   const [resettingAll, setResettingAll] = useState(false);
   const [confettiBurstCount, setConfettiBurstCount] = useState(0);
 
@@ -140,6 +149,7 @@ export default function AdminPage() {
       }
       showNotice(payload.message, true);
       setChangingMode(false);
+      setStartingAll(false);
       setResettingAll(false);
     };
 
@@ -216,6 +226,23 @@ export default function AdminPage() {
     setNotice({ text: `已重置 ${ack.data.resetCount} 位使用者`, isError: false });
   }
 
+  async function handleStartAll() {
+    if (startingAll) {
+      return;
+    }
+
+    setStartingAll(true);
+    const ack = await startAllClients();
+    setStartingAll(false);
+
+    if (!ack.ok) {
+      setNotice({ text: ack.error, isError: true });
+      return;
+    }
+
+    setNotice({ text: `已同步開始 ${ack.data.startedCount} 位使用者`, isError: false });
+  }
+
   async function handleResetOne(socketId: string) {
     const ack = await resetOneClient(socketId);
 
@@ -251,7 +278,9 @@ export default function AdminPage() {
           totalClients={sortedClients.length}
           currentPage={safePage + 1}
           totalPages={totalPages}
+          starting={startingAll}
           resetting={resettingAll}
+          onStartAll={handleStartAll}
           onResetAll={handleResetAll}
           onPrevPage={() => setCurrentPage((prev) => Math.max(0, prev - 1))}
           onNextPage={() => setCurrentPage((prev) => Math.min(totalPages - 1, prev + 1))}

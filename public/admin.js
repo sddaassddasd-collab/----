@@ -17,6 +17,7 @@ const statsLine = document.getElementById("stats-line");
 const gridEl = document.getElementById("grid");
 const modePracticeBtn = document.getElementById("mode-practice");
 const modeOfficialBtn = document.getElementById("mode-official");
+const roundStartBtn = document.getElementById("round-start");
 const roundResetBtn = document.getElementById("round-reset");
 const rebindAllBtn = document.getElementById("rebind-all");
 const prevPageBtn = document.getElementById("prev-page");
@@ -287,11 +288,26 @@ function createTile(socketId, state, rank) {
   return tile;
 }
 
+function countStartablePlayers() {
+  let readyCount = 0;
+  for (const state of players.values()) {
+    if (state.phase === "ready") {
+      readyCount += 1;
+    }
+  }
+  return readyCount;
+}
+
 function renderModeButtons() {
   modePracticeBtn?.classList.toggle("active", mode === "practice");
   modeOfficialBtn?.classList.toggle("active", mode === "official");
+  const startableCount = countStartablePlayers();
+  if (roundStartBtn) {
+    roundStartBtn.disabled = mode !== "official" || !authenticated || startableCount <= 0;
+    roundStartBtn.textContent = startableCount > 0 ? `全體開始（${startableCount}）` : "全體開始";
+  }
   if (roundResetBtn) {
-    roundResetBtn.disabled = mode !== "official";
+    roundResetBtn.disabled = mode !== "official" || !authenticated;
     roundResetBtn.textContent = "全部 Reset";
   }
   if (rebindAllBtn) {
@@ -465,6 +481,19 @@ modeOfficialBtn?.addEventListener("click", () => {
 
   socket.emit("admin:setMode", "official", (ack) => {
     handleAdminAckFailure(ack, "切換正式模式失敗");
+  });
+});
+
+roundStartBtn?.addEventListener("click", () => {
+  if (!requireAuthenticated()) {
+    return;
+  }
+
+  socket.emit("admin:startAll", (ack) => {
+    if (handleAdminAckFailure(ack, "全體開始失敗")) {
+      return;
+    }
+    showMessage(`已同步開始 ${ack.data.startedCount} 位玩家`);
   });
 });
 

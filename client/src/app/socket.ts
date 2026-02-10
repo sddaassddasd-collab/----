@@ -12,6 +12,7 @@ import type {
   ResetData,
   ServerSnapshot,
   ServerToClientEvents,
+  StartAllData,
   SnapshotData,
   StopReelData,
   StopReelPayload
@@ -101,6 +102,11 @@ export function resetOneClient(socketId: string): Promise<Ack<ResetData>> {
 export function resetAllClients(): Promise<Ack<ResetAllData>> {
   const socket = getSocket();
   return emitWithAck((ack) => socket.emit("admin:resetAll", ack));
+}
+
+export function startAllClients(): Promise<Ack<StartAllData>> {
+  const socket = getSocket();
+  return emitWithAck((ack) => socket.emit("admin:startAll", ack));
 }
 
 export function fetchSnapshot(): Promise<Ack<SnapshotData>> {
