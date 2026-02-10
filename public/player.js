@@ -114,10 +114,15 @@ function buildReelTrack(reel) {
 
   runtime.trackEl.replaceChildren();
   const repeated = [...reel.symbols, ...reel.symbols, ...reel.symbols];
+  const symbolCount = reel.symbols.length;
 
-  for (const symbol of repeated) {
+  for (let index = 0; index < repeated.length; index += 1) {
+    const symbol = repeated[index];
     const cell = document.createElement("div");
     cell.className = "reel-item";
+    if (index % symbolCount === 0) {
+      cell.classList.add("reel-item-index0");
+    }
     cell.textContent = symbol;
     runtime.trackEl.appendChild(cell);
   }

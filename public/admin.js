@@ -3,6 +3,8 @@ const socket = io();
 const PAGE_SIZE = 30;
 const MAX_COLS = 6;
 const MAX_ROWS = 5;
+const TOTAL_REELS = 4;
+const INDEX0_SYMBOLS = ["複", "象", "公", "場"];
 
 const dashboard = document.getElementById("dashboard");
 const authMsg = document.getElementById("auth-msg");
@@ -61,8 +63,41 @@ function chooseGrid(count, viewportAspect = 16 / 9) {
   return { rows: best.rows, cols: best.cols };
 }
 
+function progressFromState(state) {
+  const reels = Array.isArray(state?.reels) ? state.reels : ["-", "-", "-", "-"];
+  let correctCount = 0;
+  let completedCount = 0;
+
+  for (let index = 0; index < TOTAL_REELS; index += 1) {
+    const symbol = reels[index];
+    if (symbol && symbol !== "-") {
+      completedCount += 1;
+    }
+    if (symbol === INDEX0_SYMBOLS[index]) {
+      correctCount += 1;
+    }
+  }
+
+  return {
+    correctCount,
+    completedCount,
+    accuracy: Math.round((correctCount / TOTAL_REELS) * 100)
+  };
+}
+
 function playersSorted() {
   return [...players.entries()].sort((a, b) => {
+    const progressA = progressFromState(a[1]);
+    const progressB = progressFromState(b[1]);
+
+    if (progressA.accuracy !== progressB.accuracy) {
+      return progressB.accuracy - progressA.accuracy;
+    }
+
+    if (progressA.completedCount !== progressB.completedCount) {
+      return progressB.completedCount - progressA.completedCount;
+    }
+
     const nameDiff = a[1].name.localeCompare(b[1].name, "zh-Hant");
     if (nameDiff !== 0) {
       return nameDiff;
@@ -117,6 +152,7 @@ function resetOne(socketId) {
 }
 
 function createTile(socketId, state) {
+  const progress = progressFromState(state);
   const tile = document.createElement("article");
   tile.className = "tile";
   if (state.isWin) {
@@ -139,6 +175,10 @@ function createTile(socketId, state) {
   symbolEl.className = "tile-symbols";
   symbolEl.textContent = stateSymbols(state);
 
+  const accuracyEl = document.createElement("div");
+  accuracyEl.className = "tile-accuracy";
+  accuracyEl.textContent = `正確率 ${progress.accuracy}% (${progress.correctCount}/${TOTAL_REELS}) | 已完成 ${progress.completedCount}/${TOTAL_REELS}`;
+
   const msgEl = document.createElement("div");
   msgEl.className = "tile-msg";
   msgEl.textContent = stateMessage(state);
@@ -151,7 +191,7 @@ function createTile(socketId, state) {
     resetOne(socketId);
   });
 
-  tile.append(nameEl, idEl, phaseEl, symbolEl, msgEl, resetBtn);
+  tile.append(nameEl, idEl, phaseEl, symbolEl, accuracyEl, msgEl, resetBtn);
   return tile;
 }
 
