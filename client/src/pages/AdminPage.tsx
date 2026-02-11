@@ -11,20 +11,13 @@ import {
   startAllClients
 } from "../app/socket";
 import ConfettiLayer from "../components/admin/ConfettiLayer";
-import GridBoard, { type ClientEntry } from "../components/admin/GridBoard";
+import GridBoard from "../components/admin/GridBoard";
 import ModeToggle from "../components/admin/ModeToggle";
 import ResetControls from "../components/admin/ResetControls";
-
-const PAGE_SIZE = 30;
 
 interface NoticeState {
   text: string;
   isError: boolean;
-}
-
-function paginateClientEntries(entries: ClientEntry[], page: number, pageSize = PAGE_SIZE): ClientEntry[] {
-  const start = page * pageSize;
-  return entries.slice(start, start + pageSize);
 }
 
 export default function AdminPage() {
@@ -32,22 +25,12 @@ export default function AdminPage() {
   const [clients, setClients] = useState<Record<string, ClientState>>({});
   const [connected, setConnected] = useState(false);
   const [notice, setNotice] = useState<NoticeState | null>(null);
-  const [currentPage, setCurrentPage] = useState(0);
   const [changingMode, setChangingMode] = useState(false);
   const [startingAll, setStartingAll] = useState(false);
   const [resettingAll, setResettingAll] = useState(false);
   const [confettiBurstCount, setConfettiBurstCount] = useState(0);
 
   const sortedClients = useMemo(() => sortClientEntries(clients), [clients]);
-  const totalPages = Math.max(1, Math.ceil(sortedClients.length / PAGE_SIZE));
-  const safePage = Math.min(currentPage, totalPages - 1);
-  const pageClients = useMemo(() => paginateClientEntries(sortedClients, safePage), [sortedClients, safePage]);
-
-  useEffect(() => {
-    if (safePage !== currentPage) {
-      setCurrentPage(safePage);
-    }
-  }, [safePage, currentPage]);
 
   useEffect(() => {
     const socket = getSocket();
@@ -263,7 +246,7 @@ export default function AdminPage() {
       <header className="admin-header">
         <div>
           <h1>玩家監控儀表板</h1>
-          <p>每頁最多 30 格（6x5）</p>
+          <p>玩家由上到下排列（不分頁）</p>
         </div>
         <div className="admin-header-tags">
           <span className="admin-tag">模式：{mode === "official" ? "正式" : "練習"}</span>
@@ -276,20 +259,16 @@ export default function AdminPage() {
         <ResetControls
           mode={mode}
           totalClients={sortedClients.length}
-          currentPage={safePage + 1}
-          totalPages={totalPages}
           starting={startingAll}
           resetting={resettingAll}
           onStartAll={handleStartAll}
           onResetAll={handleResetAll}
-          onPrevPage={() => setCurrentPage((prev) => Math.max(0, prev - 1))}
-          onNextPage={() => setCurrentPage((prev) => Math.min(totalPages - 1, prev + 1))}
         />
       </div>
 
       {notice ? <p className={`admin-notice ${notice.isError ? "error" : "ok"}`}>{notice.text}</p> : null}
 
-      <GridBoard clients={pageClients} mode={mode} onResetOne={handleResetOne} />
+      <GridBoard clients={sortedClients} mode={mode} onResetOne={handleResetOne} />
       <ConfettiLayer burstCount={confettiBurstCount} />
     </main>
   );

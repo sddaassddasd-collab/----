@@ -3,35 +3,25 @@ import type { GameMode } from "../../../../shared/types";
 interface ResetControlsProps {
   mode: GameMode;
   totalClients: number;
-  currentPage: number;
-  totalPages: number;
   starting: boolean;
   resetting: boolean;
   onStartAll: () => void;
   onResetAll: () => void;
-  onPrevPage: () => void;
-  onNextPage: () => void;
 }
 
 export default function ResetControls({
   mode,
   totalClients,
-  currentPage,
-  totalPages,
   starting,
   resetting,
   onStartAll,
-  onResetAll,
-  onPrevPage,
-  onNextPage
+  onResetAll
 }: ResetControlsProps) {
   return (
     <section className="admin-reset-panel">
       <div className="admin-reset-stats">
         <p>連線人數：{totalClients}</p>
-        <p>
-          第 {currentPage} / {totalPages} 頁
-        </p>
+        <p>顯示方式：由上到下</p>
       </div>
 
       <div className="admin-reset-actions">
@@ -40,12 +30,6 @@ export default function ResetControls({
         </button>
         <button type="button" className="admin-reset-all-btn" disabled={mode !== "official" || resetting} onClick={onResetAll}>
           {resetting ? "重置中..." : "全部 Reset"}
-        </button>
-        <button type="button" className="admin-page-btn" disabled={currentPage <= 1} onClick={onPrevPage}>
-          上一頁
-        </button>
-        <button type="button" className="admin-page-btn" disabled={currentPage >= totalPages} onClick={onNextPage}>
-          下一頁
         </button>
       </div>
     </section>

@@ -50,6 +50,28 @@ function phaseMessage(state: ClientState): string {
   return "";
 }
 
+function progressFromState(state: ClientState): { correctCount: number; completedCount: number; accuracy: number } {
+  const target = state.finalReels ?? state.reels;
+  let correctCount = 0;
+  let completedCount = 0;
+
+  for (let index = 0; index < 4; index += 1) {
+    const symbol = target[index];
+    if (symbol !== "-") {
+      completedCount += 1;
+    }
+    if (symbol === MINI_REELS[index].symbols[0]) {
+      correctCount += 1;
+    }
+  }
+
+  return {
+    correctCount,
+    completedCount,
+    accuracy: Math.round((correctCount / 4) * 100)
+  };
+}
+
 export default function ClientTile({ socketId, state, rank, mode, onResetOne }: ClientTileProps) {
   const [indices, setIndices] = useState<[number, number, number, number]>([0, 0, 0, 0]);
 
@@ -109,53 +131,71 @@ export default function ClientTile({ socketId, state, rank, mode, onResetOne }: 
       return MINI_REELS[index].symbols[indices[index]];
     });
   }, [state.reels, state.finalReels, indices]);
+  const progress = useMemo(() => progressFromState(state), [state.reels, state.finalReels]);
+  const statusText = phaseMessage(state);
+  const phaseLabel = phaseText(state.phase);
 
   return (
     <article className={`admin-client-tile ${state.isWin ? "winner" : ""}`}>
-      <div className="admin-client-top">
-        <div>
-          <div className="admin-client-name-row">
-            <span className="admin-client-rank">#{rank}</span>
-            <p className="admin-client-name">{state.name}</p>
-          </div>
-          <p className="admin-client-id">ID {socketId.slice(0, 8)}</p>
-          <p className="admin-client-time">完成時間：{formatFinishedAt(state.finishedAt)}</p>
-        </div>
-        <span className={`admin-phase-badge ${state.phase}`}>{phaseText(state.phase)}</span>
-      </div>
-
-      <div className="admin-mini-slot">
-        {MINI_REELS.map((reel, index) => {
-          const currentSymbol = displaySymbols[index];
-          const currentIndex = reel.symbols.indexOf(currentSymbol);
-          const fallbackIndex = indices[index];
-          const centerIndex = currentIndex >= 0 ? currentIndex : fallbackIndex;
-          const prevIndex = normalize(centerIndex - 1, reel.symbols.length);
-          const nextIndex = normalize(centerIndex + 1, reel.symbols.length);
-          const spinning = state.phase === "spinning" && state.reels[index] === "-";
-
-          return (
-            <div key={reel.reelId} className="admin-mini-reel">
-              <div
-                className={`admin-mini-stack ${spinning ? "spinning" : ""} ${
-                  reel.direction === "up_to_down" ? "down" : "up"
-                }`}
-              >
-                <div className="admin-mini-item muted">{reel.symbols[prevIndex]}</div>
-                <div className="admin-mini-item current">{reel.symbols[centerIndex]}</div>
-                <div className="admin-mini-item muted">{reel.symbols[nextIndex]}</div>
-              </div>
-              <div className="admin-mini-center-line" />
+      <div className="admin-client-layout">
+        <div className="admin-client-identity">
+          <div className="admin-client-headline">
+            <div className="admin-client-name-row">
+              <span className="admin-client-rank">#{rank}</span>
+              <p className="admin-client-name">{state.name}</p>
             </div>
-          );
-        })}
+            <span className={`admin-phase-badge ${state.phase}`}>{phaseLabel}</span>
+          </div>
+
+          <div className="admin-client-meta-row">
+            <p className="admin-client-id">ID {socketId.slice(0, 8)}</p>
+            <p className="admin-client-time">完成時間：{formatFinishedAt(state.finishedAt)}</p>
+          </div>
+          <p className="admin-client-state">狀態：{phaseLabel}</p>
+        </div>
+
+        <div className="admin-client-visual">
+          <div className="admin-mini-slot">
+            {MINI_REELS.map((reel, index) => {
+              const currentSymbol = displaySymbols[index];
+              const currentIndex = reel.symbols.indexOf(currentSymbol);
+              const fallbackIndex = indices[index];
+              const centerIndex = currentIndex >= 0 ? currentIndex : fallbackIndex;
+              const prevIndex = normalize(centerIndex - 1, reel.symbols.length);
+              const nextIndex = normalize(centerIndex + 1, reel.symbols.length);
+              const spinning = state.phase === "spinning" && state.reels[index] === "-";
+
+              return (
+                <div key={reel.reelId} className="admin-mini-reel">
+                  <div
+                    className={`admin-mini-stack ${spinning ? "spinning" : ""} ${
+                      reel.direction === "up_to_down" ? "down" : "up"
+                    }`}
+                  >
+                    <div className="admin-mini-item muted">{reel.symbols[prevIndex]}</div>
+                    <div className="admin-mini-item current">{reel.symbols[centerIndex]}</div>
+                    <div className="admin-mini-item muted">{reel.symbols[nextIndex]}</div>
+                  </div>
+                  <div className="admin-mini-center-line" />
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="admin-client-pill-row">
+            <span className="admin-client-pill admin-accuracy-pill">
+              正確率 {progress.accuracy}% ({progress.correctCount}/4) | 已完成 {progress.completedCount}/4
+            </span>
+            {statusText ? <span className="admin-client-pill admin-message-pill">{statusText}</span> : null}
+          </div>
+        </div>
+
+        <div className="admin-client-actions">
+          <button type="button" className="admin-reset-one-btn" disabled={mode !== "official"} onClick={() => onResetOne(socketId)}>
+            Reset 此人
+          </button>
+        </div>
       </div>
-
-      <p className="admin-client-message">{phaseMessage(state)}</p>
-
-      <button type="button" className="admin-reset-one-btn" disabled={mode !== "official"} onClick={() => onResetOne(socketId)}>
-        Reset 此人
-      </button>
     </article>
   );
 }

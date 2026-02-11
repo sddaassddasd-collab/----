@@ -1,8 +1,5 @@
 const socket = io({ autoConnect: false });
 
-const PAGE_SIZE = 30;
-const MAX_COLS = 6;
-const MAX_ROWS = 5;
 const TOTAL_REELS = 4;
 const INDEX0_SYMBOLS = ["複", "象", "公", "場"];
 
@@ -20,13 +17,9 @@ const modeOfficialBtn = document.getElementById("mode-official");
 const roundStartBtn = document.getElementById("round-start");
 const roundResetBtn = document.getElementById("round-reset");
 const rebindAllBtn = document.getElementById("rebind-all");
-const prevPageBtn = document.getElementById("prev-page");
-const nextPageBtn = document.getElementById("next-page");
-const pageInfo = document.getElementById("page-info");
 const confettiLayer = document.getElementById("confetti-layer");
 
 let mode = "practice";
-let currentPage = 0;
 let authenticated = false;
 
 const players = new Map();
@@ -57,31 +50,6 @@ function toStateText(phase) {
   if (phase === "spinning") return "轉動中";
   if (phase === "locked") return "等待後台 reset";
   return "未知";
-}
-
-function chooseGrid(count, viewportAspect = 16 / 9) {
-  if (count <= 0) {
-    return { rows: 1, cols: 1 };
-  }
-
-  let best = { rows: 1, cols: 1, score: Number.POSITIVE_INFINITY };
-
-  for (let cols = 1; cols <= MAX_COLS; cols += 1) {
-    const rows = Math.ceil(count / cols);
-    if (rows > MAX_ROWS) {
-      continue;
-    }
-
-    const empty = rows * cols - count;
-    const aspectDiff = Math.abs(cols / rows - viewportAspect);
-    const score = empty * 100 + aspectDiff;
-
-    if (score < best.score) {
-      best = { rows, cols, score };
-    }
-  }
-
-  return { rows: best.rows, cols: best.cols };
 }
 
 function progressFromState(state) {
@@ -150,22 +118,6 @@ function playersSorted() {
     }
     return a[0].localeCompare(b[0]);
   });
-}
-
-function pagedPlayers() {
-  const all = playersSorted();
-  const totalPages = Math.max(1, Math.ceil(all.length / PAGE_SIZE));
-  currentPage = Math.min(Math.max(0, currentPage), totalPages - 1);
-
-  const start = currentPage * PAGE_SIZE;
-  const pageItems = all.slice(start, start + PAGE_SIZE);
-
-  return {
-    all,
-    totalPages,
-    pageItems,
-    start
-  };
 }
 
 function stateSymbols(state) {
@@ -238,11 +190,22 @@ function resetOne(socketId) {
 
 function createTile(socketId, state, rank) {
   const progress = progressFromState(state);
+  const phaseText = toStateText(state.phase);
+  const messageText = stateMessage(state);
   const tile = document.createElement("article");
   tile.className = "tile";
   if (state.isWin) {
     tile.classList.add("winner");
   }
+
+  const mainEl = document.createElement("div");
+  mainEl.className = "tile-main";
+
+  const identityEl = document.createElement("div");
+  identityEl.className = "tile-identity";
+
+  const headingEl = document.createElement("div");
+  headingEl.className = "tile-heading";
 
   const nameRow = document.createElement("div");
   nameRow.className = "tile-name-row";
@@ -257,6 +220,12 @@ function createTile(socketId, state, rank) {
 
   nameRow.append(rankEl, nameEl);
 
+  const phaseBadgeEl = document.createElement("span");
+  phaseBadgeEl.className = `tile-phase-badge ${state.phase}`;
+  phaseBadgeEl.textContent = phaseText;
+
+  headingEl.append(nameRow, phaseBadgeEl);
+
   const idEl = document.createElement("div");
   idEl.className = "tile-id";
   idEl.textContent = `ID ${socketId.slice(0, 8)}`;
@@ -265,9 +234,18 @@ function createTile(socketId, state, rank) {
   finishedAtEl.className = "tile-finished-at";
   finishedAtEl.textContent = `完成時間 ${formatFinishedAt(state.finishedAt)}`;
 
+  const metaRowEl = document.createElement("div");
+  metaRowEl.className = "tile-meta-row";
+  metaRowEl.append(idEl, finishedAtEl);
+
   const phaseEl = document.createElement("div");
   phaseEl.className = "tile-state";
-  phaseEl.textContent = toStateText(state.phase);
+  phaseEl.textContent = `狀態：${phaseText}`;
+
+  identityEl.append(headingEl, metaRowEl, phaseEl);
+
+  const visualEl = document.createElement("div");
+  visualEl.className = "tile-visual";
 
   const symbolEl = document.createElement("div");
   symbolEl.className = "tile-symbols";
@@ -282,13 +260,25 @@ function createTile(socketId, state, rank) {
     symbolEl.appendChild(symbolItemEl);
   }
 
-  const accuracyEl = document.createElement("div");
-  accuracyEl.className = "tile-accuracy";
-  accuracyEl.textContent = `正確率 ${progress.accuracy}% (${progress.correctCount}/${TOTAL_REELS}) | 已完成 ${progress.completedCount}/${TOTAL_REELS}`;
+  const summaryEl = document.createElement("div");
+  summaryEl.className = "tile-summary";
 
-  const msgEl = document.createElement("div");
-  msgEl.className = "tile-msg";
-  msgEl.textContent = stateMessage(state);
+  const accuracyEl = document.createElement("div");
+  accuracyEl.className = "tile-pill tile-accuracy";
+  accuracyEl.textContent = `正確率 ${progress.accuracy}% (${progress.correctCount}/${TOTAL_REELS}) | 已完成 ${progress.completedCount}/${TOTAL_REELS}`;
+  summaryEl.appendChild(accuracyEl);
+
+  if (messageText) {
+    const msgEl = document.createElement("div");
+    msgEl.className = "tile-pill tile-msg";
+    msgEl.textContent = messageText;
+    summaryEl.appendChild(msgEl);
+  }
+
+  visualEl.append(symbolEl, summaryEl);
+
+  const actionEl = document.createElement("div");
+  actionEl.className = "tile-actions";
 
   const resetBtn = document.createElement("button");
   resetBtn.className = "tile-reset";
@@ -297,8 +287,10 @@ function createTile(socketId, state, rank) {
   resetBtn.addEventListener("click", () => {
     resetOne(socketId);
   });
+  actionEl.appendChild(resetBtn);
 
-  tile.append(nameRow, idEl, finishedAtEl, phaseEl, symbolEl, accuracyEl, msgEl, resetBtn);
+  mainEl.append(identityEl, visualEl, actionEl);
+  tile.append(mainEl);
   return tile;
 }
 
@@ -330,31 +322,18 @@ function renderModeButtons() {
 }
 
 function renderGrid() {
-  const { all, totalPages, pageItems, start } = pagedPlayers();
-  const viewportAspect = window.innerWidth / Math.max(window.innerHeight, 1);
-  const { rows, cols } = chooseGrid(Math.max(pageItems.length, 1), viewportAspect);
+  const all = playersSorted();
 
   if (gridEl) {
-    gridEl.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
-    gridEl.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
     gridEl.replaceChildren();
 
-    pageItems.forEach(([socketId, state], index) => {
-      gridEl.appendChild(createTile(socketId, state, start + index + 1));
+    all.forEach(([socketId, state], index) => {
+      gridEl.appendChild(createTile(socketId, state, index + 1));
     });
   }
 
   if (statsLine) {
     statsLine.textContent = `連線玩家 ${all.length} 人 | 模式 ${mode === "official" ? "正式" : "練習"}`;
-  }
-  if (pageInfo) {
-    pageInfo.textContent = `第 ${currentPage + 1} / ${totalPages} 頁`;
-  }
-  if (prevPageBtn) {
-    prevPageBtn.disabled = currentPage <= 0;
-  }
-  if (nextPageBtn) {
-    nextPageBtn.disabled = currentPage >= totalPages - 1;
   }
   renderModeButtons();
 }
@@ -389,7 +368,6 @@ function applySnapshot(snapshot) {
 function applyUnauthorized(message) {
   authenticated = false;
   players.clear();
-  currentPage = 0;
   mode = "practice";
   if (socket.connected) {
     socket.disconnect();
@@ -417,7 +395,6 @@ async function restoreSession() {
     if (!payload.authenticated) {
       authenticated = false;
       players.clear();
-      currentPage = 0;
       mode = "practice";
       syncAuthView();
       showLoginMessage("請輸入 admin token 登入。");
@@ -535,16 +512,6 @@ rebindAllBtn?.addEventListener("click", () => {
     }
     showMessage(`已要求 ${ack.data.rebindCount} 位玩家重新綁定姓名`);
   });
-});
-
-prevPageBtn?.addEventListener("click", () => {
-  currentPage = Math.max(0, currentPage - 1);
-  renderGrid();
-});
-
-nextPageBtn?.addEventListener("click", () => {
-  currentPage += 1;
-  renderGrid();
 });
 
 window.addEventListener("resize", renderGrid);
