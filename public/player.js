@@ -10,7 +10,7 @@ const REELS = [
 const EMPTY_REELS = ["-", "-", "-", "-"];
 const ITEM_HEIGHT_FALLBACK = 48;
 const RECONNECT_TOKEN_STORAGE_KEY = "slot_reconnect_token";
-const SPIN_SPEED_SYMBOLS_PER_SECOND = 8;
+const SPIN_SPEED_SYMBOLS_PER_SECOND = 6;
 const MAX_SPIN_FRAME_DELTA_MS = 50;
 
 const nameScreen = document.getElementById("name-screen");
