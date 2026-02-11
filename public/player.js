@@ -10,6 +10,8 @@ const REELS = [
 const EMPTY_REELS = ["-", "-", "-", "-"];
 const ITEM_HEIGHT_FALLBACK = 48;
 const RECONNECT_TOKEN_STORAGE_KEY = "slot_reconnect_token";
+const SPIN_SPEED_SYMBOLS_PER_SECOND = 8;
+const MAX_SPIN_FRAME_DELTA_MS = 50;
 
 const nameScreen = document.getElementById("name-screen");
 const gameScreen = document.getElementById("game-screen");
@@ -41,11 +43,13 @@ let currentRank = null;
 let totalRankedPlayers = 0;
 
 const reelRuntime = {
-  1: { timer: null, position: 5, trackEl: document.getElementById("reel-track-1") },
-  2: { timer: null, position: 5, trackEl: document.getElementById("reel-track-2") },
-  3: { timer: null, position: 5, trackEl: document.getElementById("reel-track-3") },
-  4: { timer: null, position: 5, trackEl: document.getElementById("reel-track-4") }
+  1: { spinning: false, direction: 1, position: 5, trackEl: document.getElementById("reel-track-1") },
+  2: { spinning: false, direction: -1, position: 5, trackEl: document.getElementById("reel-track-2") },
+  3: { spinning: false, direction: 1, position: 5, trackEl: document.getElementById("reel-track-3") },
+  4: { spinning: false, direction: -1, position: 5, trackEl: document.getElementById("reel-track-4") }
 };
+let spinLoopId = null;
+let spinLastFrameAt = null;
 
 if (playerName) {
   nameInput.value = playerName;
@@ -309,13 +313,14 @@ function resetReelSymbols() {
 
 function stopReelAnimation(reelId, finalSymbol) {
   const runtime = reelRuntime[reelId];
-  if (runtime.timer) {
-    clearInterval(runtime.timer);
-  }
-  runtime.timer = null;
+  runtime.spinning = false;
 
   if (typeof finalSymbol === "string") {
     setReelToSymbol(reelId, finalSymbol, true);
+  }
+
+  if (!hasRunningReel()) {
+    stopSpinLoop();
   }
 }
 
@@ -331,17 +336,10 @@ function startSpinAnimation() {
 
   for (const reel of REELS) {
     const runtime = reelRuntime[reel.reelId];
-    if (runtime.timer) {
-      clearInterval(runtime.timer);
-    }
-
-    const step = reel.direction === "up_to_down" ? 0.35 : -0.35;
-    runtime.timer = setInterval(() => {
-      runtime.position += step;
-      normalizePosition(reel.reelId);
-      applyReelTransform(reel.reelId, false);
-    }, 34 + reel.reelId * 5);
+    runtime.spinning = true;
   }
+
+  ensureSpinLoop();
 }
 
 function renderReelsByState(state) {
@@ -362,7 +360,48 @@ function renderReelsByState(state) {
 }
 
 function hasRunningReel() {
-  return Object.values(reelRuntime).some((runtime) => Boolean(runtime.timer));
+  return Object.values(reelRuntime).some((runtime) => runtime.spinning);
+}
+
+function stopSpinLoop() {
+  if (spinLoopId !== null) {
+    window.cancelAnimationFrame(spinLoopId);
+  }
+  spinLoopId = null;
+  spinLastFrameAt = null;
+}
+
+function runSpinLoop(timestamp) {
+  if (!hasRunningReel()) {
+    stopSpinLoop();
+    return;
+  }
+
+  const frameDeltaMs = spinLastFrameAt === null ? 16.67 : Math.min(timestamp - spinLastFrameAt, MAX_SPIN_FRAME_DELTA_MS);
+  spinLastFrameAt = timestamp;
+  const deltaSeconds = frameDeltaMs / 1000;
+  const moveDelta = SPIN_SPEED_SYMBOLS_PER_SECOND * deltaSeconds;
+
+  for (const reel of REELS) {
+    const runtime = reelRuntime[reel.reelId];
+    if (!runtime.spinning) {
+      continue;
+    }
+
+    runtime.position += runtime.direction * moveDelta;
+    normalizePosition(reel.reelId);
+    applyReelTransform(reel.reelId, false);
+  }
+
+  spinLoopId = window.requestAnimationFrame(runSpinLoop);
+}
+
+function ensureSpinLoop() {
+  if (spinLoopId !== null) {
+    return;
+  }
+  spinLastFrameAt = null;
+  spinLoopId = window.requestAnimationFrame(runSpinLoop);
 }
 
 function nextStopFromReels(reels) {
